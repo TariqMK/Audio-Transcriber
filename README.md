@@ -94,10 +94,11 @@ The tests use a fake model. They do not need a model download or a network conne
 Releases are built by the **Release** workflow in GitHub Actions.
 
 1. Open the **Actions** tab on GitHub and select **Release**.
-2. Select **Run workflow** on the `main` branch.
+2. Select **Run workflow** and choose the branch. Releases (`draft` and `public`) run only on `main`.
 3. Choose the **Release type**:
    - `draft` creates a draft release that only you can see. Publish it on GitHub when it is ready.
    - `public` publishes the release immediately.
+   - `test-build` builds all three platforms from any branch, without a version number, tag or release. Download the files from the **Artifacts** section of the workflow run. GitHub keeps them for 90 days.
 4. Choose the **Version increment**: `patch` (1.2.3 → 1.2.4), `minor` (1.2.3 → 1.3.0) or `major` (1.2.3 → 2.0.0).
 5. Select **Run workflow**.
 
