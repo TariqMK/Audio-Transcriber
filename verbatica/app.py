@@ -1,4 +1,4 @@
-"""The Audio Transcriber main window: choose a model, folders, formats and files,
+"""The Verbatica main window: choose a model, folders, formats and files,
 then transcribe them. Also holds the version button that checks for updates."""
 
 from __future__ import annotations
@@ -14,10 +14,10 @@ from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QG
                              QMessageBox, QProgressBar, QPushButton, QTextEdit, QVBoxLayout,
                              QWidget)
 
-from audio_transcriber import APP_NAME, __version__, update_check
-from audio_transcriber.models import DEFAULT_MODEL, MODEL_SIZES, MODEL_URLS, ModelDownloadWorker
-from audio_transcriber.settings import SettingsStore
-from audio_transcriber.transcription import (AUDIO_FILE_FILTER, OUTPUT_FORMATS, TranscriptionWorker,
+from verbatica import APP_NAME, __version__, update_check
+from verbatica.models import DEFAULT_MODEL, MODEL_SIZES, MODEL_URLS, ModelDownloadWorker
+from verbatica.settings import SettingsStore
+from verbatica.transcription import (AUDIO_FILE_FILTER, OUTPUT_FORMATS, TranscriptionWorker,
                                              add_unique_files, find_ffmpeg)
 
 VERSION_TEXT = f"v{__version__}"

@@ -3,7 +3,7 @@
 import json
 import sys
 
-from audio_transcriber import settings as st
+from verbatica import settings as st
 
 
 def make_store(tmp_path, legacy=None):
@@ -17,7 +17,7 @@ def make_store(tmp_path, legacy=None):
 def test_defaults_point_inside_the_data_folder(tmp_path):
     store = make_store(tmp_path)
     s = store.load()
-    data = tmp_path / "app" / "Audio-Transcriber-data"
+    data = tmp_path / "app" / "Verbatica-data"
     assert s.models_dir == str(data / "models")
     assert s.error_log_dir == str(data / "logs")
     assert s.output_formats == [".txt"]
@@ -30,7 +30,7 @@ def test_settings_round_trip(tmp_path):
     s.output_dir = str(tmp_path / "elsewhere")
     s.output_formats = [".srt", ".vtt"]
     store.save(s)
-    assert store.file == tmp_path / "app" / "Audio-Transcriber-data" / "settings.json"
+    assert store.file == tmp_path / "app" / "Verbatica-data" / "settings.json"
     loaded = store.load()
     assert loaded.output_dir == str((tmp_path / "elsewhere").resolve())
     assert loaded.output_formats == [".srt", ".vtt"]
@@ -40,12 +40,12 @@ def test_paths_inside_the_app_folder_are_stored_relative_and_survive_a_move(tmp_
     store = make_store(tmp_path)
     store.save(store.load())
     stored = json.loads(store.file.read_text())
-    assert stored["models_dir"] == "Audio-Transcriber-data/models"
+    assert stored["models_dir"] == "Verbatica-data/models"
 
     moved = tmp_path / "moved"
     (tmp_path / "app").rename(moved)
     loaded = st.SettingsStore(moved, legacy_file=tmp_path / "none.json").load()
-    assert loaded.models_dir == str(moved / "Audio-Transcriber-data" / "models")
+    assert loaded.models_dir == str(moved / "Verbatica-data" / "models")
 
 
 def test_old_home_folder_settings_are_carried_over_and_left_alone(tmp_path):
@@ -80,7 +80,7 @@ def test_unknown_formats_are_dropped(tmp_path):
 
 
 def test_app_folder_is_beside_the_macos_app_bundle(tmp_path, monkeypatch):
-    exe = tmp_path / "Apps" / "Audio-Transcriber.app" / "Contents" / "MacOS" / "Audio-Transcriber"
+    exe = tmp_path / "Apps" / "Verbatica.app" / "Contents" / "MacOS" / "Verbatica"
     exe.parent.mkdir(parents=True)
     exe.write_text("")
     monkeypatch.setattr(sys, "frozen", True, raising=False)
@@ -89,7 +89,7 @@ def test_app_folder_is_beside_the_macos_app_bundle(tmp_path, monkeypatch):
 
 
 def test_app_folder_is_beside_a_single_file_build(tmp_path, monkeypatch):
-    exe = tmp_path / "Downloads" / "Audio-Transcriber.exe"
+    exe = tmp_path / "Downloads" / "Verbatica.exe"
     exe.parent.mkdir(parents=True)
     exe.write_text("")
     monkeypatch.setattr(sys, "frozen", True, raising=False)

@@ -5,11 +5,11 @@ import urllib.error
 
 import pytest
 
-from audio_transcriber import update_check as uc
+from verbatica import update_check as uc
 
 SAMPLE = {
     "tag_name": "v1.3.0",
-    "html_url": "https://github.com/TariqMK/Audio-Transcriber/releases/tag/v1.3.0",
+    "html_url": "https://github.com/TariqMK/Verbatica/releases/tag/v1.3.0",
     "body": "  Faster transcription.  ",
 }
 
@@ -47,7 +47,7 @@ def test_development_build_is_never_up_to_date_or_older():
 @pytest.mark.parametrize("url", [None, "http://github.com/x", "javascript:alert(1)", 42])
 def test_missing_or_unsafe_release_url_falls_back_to_releases_page(url):
     info = uc.parse_release({**SAMPLE, "html_url": url}, "1.0.0")
-    assert info.url == "https://github.com/TariqMK/Audio-Transcriber/releases"
+    assert info.url == "https://github.com/TariqMK/Verbatica/releases"
 
 
 @pytest.mark.parametrize("data", [None, [], {"tag_name": 5}, {"tag_name": "latest"}])
@@ -61,7 +61,7 @@ def http_error(code):
 
 
 @pytest.mark.parametrize("error, message", [
-    (http_error(404), "No Audio Transcriber releases are published yet."),
+    (http_error(404), "No Verbatica releases are published yet."),
     (http_error(403), "GitHub limits how often it can be checked. Try again in an hour."),
     (http_error(429), "GitHub limits how often it can be checked. Try again in an hour."),
     (http_error(500), "GitHub answered with error 500. Try again later."),
@@ -95,7 +95,7 @@ def test_request_sends_only_user_agent_and_accept(monkeypatch):
     monkeypatch.setattr(uc.urllib.request, "urlopen", fake_urlopen)
     info = uc.check("1.0.0")
     assert info.newer
-    assert sent["url"] == "https://api.github.com/repos/TariqMK/Audio-Transcriber/releases/latest"
+    assert sent["url"] == "https://api.github.com/repos/TariqMK/Verbatica/releases/latest"
     assert sent["method"] == "GET" and sent["data"] is None and sent["timeout"] == 10.0
     assert set(sent["headers"]) == {"User-agent", "Accept"}
 

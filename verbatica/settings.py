@@ -9,9 +9,9 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from audio_transcriber.transcription import OUTPUT_FORMATS
+from verbatica.transcription import OUTPUT_FORMATS
 
-DATA_FOLDER_NAME = "Audio-Transcriber-data"
+DATA_FOLDER_NAME = "Verbatica-data"
 SETTINGS_FILE_NAME = "settings.json"
 
 # Settings file used by versions before the data folder. Read once to carry settings over; never changed.
@@ -24,7 +24,7 @@ def app_folder() -> Path:
     if getattr(sys, "frozen", False):
         executable = Path(sys.executable).resolve()
         for parent in executable.parents:
-            if parent.suffix == ".app":  # .../Audio-Transcriber.app/Contents/MacOS/Audio-Transcriber
+            if parent.suffix == ".app":  # .../Verbatica.app/Contents/MacOS/Verbatica
                 return parent.parent
         return executable.parent
     return Path(__file__).resolve().parent.parent

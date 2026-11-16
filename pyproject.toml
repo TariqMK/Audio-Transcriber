@@ -1,10 +1,10 @@
-# Package metadata and dependencies for Audio Transcriber. The version is read from audio_transcriber/_version.py.
+# Package metadata and dependencies for Verbatica. The version is read from verbatica/_version.py.
 [build-system]
 requires = ["setuptools>=69"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "audio-transcriber"
+name = "verbatica"
 dynamic = ["version"]
 description = "Transcribe audio and video files locally with OpenAI Whisper models."
 readme = "README.md"
@@ -18,13 +18,13 @@ dependencies = [
 dev = ["pytest"]
 
 [project.gui-scripts]
-audio-transcriber = "audio_transcriber.app:main"
+verbatica = "verbatica.app:main"
 
 [tool.setuptools]
-packages = ["audio_transcriber"]
+packages = ["verbatica"]
 
 [tool.setuptools.dynamic]
-version = { attr = "audio_transcriber._version.__version__" }
+version = { attr = "verbatica._version.__version__" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

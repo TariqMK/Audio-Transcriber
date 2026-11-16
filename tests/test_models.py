@@ -5,7 +5,7 @@ import hashlib
 import pytest
 from conftest import collect
 
-from audio_transcriber import models
+from verbatica import models
 
 
 @pytest.fixture

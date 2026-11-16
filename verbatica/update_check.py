@@ -1,4 +1,4 @@
-"""Checks GitHub for a newer Audio Transcriber release. Runs only when the user selects
+"""Checks GitHub for a newer Verbatica release. Runs only when the user selects
 the version number; nothing is downloaded, installed or stored."""
 
 from __future__ import annotations
@@ -9,7 +9,7 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass
 
-from audio_transcriber import APP_NAME, REPOSITORY, __version__
+from verbatica import APP_NAME, REPOSITORY, __version__
 
 LATEST_URL = f"https://api.github.com/repos/{REPOSITORY}/releases/latest"
 RELEASES_PAGE = f"https://github.com/{REPOSITORY}/releases"

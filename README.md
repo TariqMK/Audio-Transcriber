@@ -1,4 +1,4 @@
-# Audio-Transcriber
+# Verbatica
 Transcribe audio and video files on your own computer with OpenAI Whisper models. Save the results as text or subtitles. Works offline after the first model download. Sends no audio or text anywhere.
 
 <img width="1429" height="1450" alt="image" src="https://github.com/user-attachments/assets/5fd70da5-2504-4837-b1ba-5806cc085b25" />
@@ -13,19 +13,24 @@ Transcribe audio and video files on your own computer with OpenAI Whisper models
 - Portable: settings and models are kept in a folder next to the app.
 
 ## Download
-Download the latest version from the [Releases page](https://github.com/TariqMK/Audio-Transcriber/releases):
+Download the latest version from the [Releases page](https://github.com/TariqMK/Verbatica/releases):
 
 | Platform | File |
 |---|---|
-| Windows (64-bit) | `Audio-Transcriber-vX.Y.Z-windows-x64.exe` |
-| macOS (Apple Silicon) | `Audio-Transcriber-vX.Y.Z-macos-arm64.zip` |
-| Linux (64-bit) | `Audio-Transcriber-vX.Y.Z-linux-x64.tar.gz` |
+| Windows (64-bit) | `Verbatica-vX.Y.Z-windows-x64.exe` |
+| macOS (Apple Silicon) | `Verbatica-vX.Y.Z-macos-arm64.zip` |
+| Linux (64-bit) | `Verbatica-vX.Y.Z-linux-x64.tar.gz` |
 
 Each download is 300 MB to 800 MB because it includes PyTorch and Whisper.
 
 **Note:** The builds are not code-signed.
 - macOS: the first time you open the app, macOS blocks it. Open **System Settings > Privacy & Security** and select **Open Anyway**.
 - Windows: if SmartScreen shows a warning, select **More info**, then **Run anyway**.
+
+**Note:** Verbatica was called Audio-Transcriber up to v1.0.0. Verbatica does not use the old `Audio-Transcriber-data` folder.
+- Select your folders and download your models again in Verbatica.
+- To use a model you already downloaded, select **Browse** next to **Models Folder** and choose `Audio-Transcriber-data/models`.
+- When you no longer need the old app and its `Audio-Transcriber-data` folder, you can delete them.
 
 ## Install ffmpeg
 The app needs ffmpeg to read audio. Install it once:
@@ -37,8 +42,8 @@ If ffmpeg is missing, the app tells you when you select **Start Transcription**.
 
 ## Set up the app
 1. Put the app in a folder you can write to, for example a new folder in Documents.
-   **Note:** The app creates its data folder, `Audio-Transcriber-data`, next to itself. Do not run it from a read-only folder such as `Program Files`.
-   **Note (macOS):** Unzip the download and move `Audio-Transcriber.app` out of Downloads before you open it.
+   **Note:** The app creates its data folder, `Verbatica-data`, next to itself. Do not run it from a read-only folder such as `Program Files`.
+   **Note (macOS):** Unzip the download and move `Verbatica.app` out of Downloads before you open it.
 2. Open the app.
 
 ## How to use
@@ -64,7 +69,7 @@ The app checks only when you select the version number. It never checks on its o
 - Transcription runs fully on your computer. Audio and transcripts never leave it.
 - No telemetry, analytics or tracking.
 - With a model downloaded, the app works with no internet connection.
-- Settings, models and error logs are stored in the `Audio-Transcriber-data` folder next to the app. Move the app and that folder together to keep everything.
+- Settings, models and error logs are stored in the `Verbatica-data` folder next to the app. Move the app and that folder together to keep everything.
 - Transcripts are saved only in the folder you choose.
 - The app makes only two network connections, and only when you ask:
   - When you select **Download & Load Model** and that model is not yet downloaded, the app downloads it from OpenAI's model server (`openaipublic.azureedge.net`). It sends nothing except the request for the file.
@@ -79,9 +84,9 @@ You need Python 3.9 or later and ffmpeg.
    - macOS and Linux: `source .venv/bin/activate`
    - Windows: `.venv\Scripts\activate`
 4. Install the app and its dependencies: `pip install -e ".[dev]"`
-5. Start the app: `python -m audio_transcriber`
+5. Start the app: `python -m verbatica`
 
-A source run shows the version `v0.0.0.dev0` and keeps its data in `Audio-Transcriber-data` in the project folder.
+A source run shows the version `v0.0.0.dev0` and keeps its data in `Verbatica-data` in the project folder.
 
 **Note:** Settings from versions before the data folder (`~/.whisper_gui_settings.json`) are copied over on first start. The old file is not changed or deleted.
 

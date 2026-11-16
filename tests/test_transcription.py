@@ -4,7 +4,7 @@ import sys
 
 from conftest import collect
 
-from audio_transcriber import transcription as tr
+from verbatica import transcription as tr
 
 # --- Output file names -------------------------------------------------------
 
