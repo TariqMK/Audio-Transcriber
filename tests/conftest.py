@@ -14,6 +14,16 @@ from PyQt6.QtWidgets import QApplication  # noqa: E402
 qt_app = QApplication.instance() or QApplication([])
 
 
+@pytest.fixture(autouse=True)
+def fake_audio(monkeypatch):
+    """Skip real decoding: the fake model gets the file path in place of the audio,
+    with a flat waveform and a duration of 60 seconds."""
+    from verbatica import transcription
+
+    monkeypatch.setattr(transcription, "load_audio",
+                        lambda path: (str(path), [0.5] * transcription.WAVEFORM_BARS, 60.0))
+
+
 @pytest.fixture
 def fake_whisper(monkeypatch):
     """A fake `faster_whisper` package whose WhisperModel records how it was loaded."""

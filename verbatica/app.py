@@ -1,39 +1,35 @@
-"""The Verbatica main window: choose a model, folders, formats and files,
-then transcribe them. Also holds the version button that checks for updates."""
+"""The Verbatica main window: a queue of recordings, each with its waveform, the model in the
+header and where to save in the footer. Folders set once and the update check live in a
+separate Settings window."""
 
 from __future__ import annotations
 
 import base64
+import os
+import subprocess
 import sys
 import traceback
 from pathlib import Path
 
 from PyQt6.QtCore import QSize, Qt, QThread, QUrl, pyqtSignal
-from PyQt6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPalette, QPixmap
-from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QGroupBox,
-                             QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow,
-                             QMessageBox, QProgressBar, QPushButton, QTextEdit, QVBoxLayout,
-                             QWidget)
+from PyQt6.QtGui import QAction, QDesktopServices, QGuiApplication, QIcon, QKeySequence, QPixmap
+from PyQt6.QtWidgets import (QApplication, QDialog, QFileDialog, QFrame, QGridLayout, QHBoxLayout,
+                             QLabel, QMainWindow, QMessageBox, QProgressBar, QPushButton, QScrollArea,
+                             QStackedWidget, QVBoxLayout, QWidget)
 
-from verbatica import APP_NAME, __version__, update_check
+from verbatica import APP_NAME, __version__, theme, update_check
 from verbatica._icon import ICON_PNGS
-from verbatica.models import DEFAULT_MODEL, MODEL_SIZES, MODELS, ModelDownloadWorker
+from verbatica.models import DEFAULT_MODEL, MODEL_SIZES, MODELS, ModelDownloadWorker, is_downloaded
 from verbatica.settings import SettingsStore
-from verbatica.transcription import (AUDIO_FILE_FILTER, OUTPUT_FORMATS, TranscriptionWorker,
-                                             add_unique_files)
+from verbatica.transcription import (AUDIO_EXTENSIONS, AUDIO_FILE_FILTER, OUTPUT_FORMATS,
+                                     TranscriptionWorker, add_unique_files)
+from verbatica.widgets import ElidedLabel, FileRow, Glyph, ModelPopup, format_taken
 
 VERSION_TEXT = f"v{__version__}"
-VERSION_MUTED = "#a6a6a6"
-VERSION_ACCENT = "#64b5f6"
-VERSION_STYLE = """
-QPushButton#version {{
-    color: {color}; background: transparent; border: 1px solid transparent;
-    border-radius: 4px; padding: 2px 6px; font-size: 12px;
-}}
-QPushButton#version:hover {{ background: rgba(255, 255, 255, 0.10); }}
-QPushButton#version:focus {{ border: 1px solid #2a82da; }}
-QPushButton#version:disabled {{ color: {color}; }}
-"""
+
+# Short names for the format chips in the footer
+FORMAT_CHIPS = {".txt": "Text", ".srt": "SRT", ".vtt": "VTT"}
+
 
 def app_icon() -> QIcon:
     """The window and taskbar icon, built from PNG data inside the package (no files to ship)."""
@@ -45,23 +41,24 @@ def app_icon() -> QIcon:
     return icon
 
 
-# Main action buttons. One accent colour (the theme's highlight blue) marks the primary action;
-# the rest are neutral. White on #2a82da is 4.0:1, above the 3:1 needed for bold 14 px text.
-BUTTON_STYLE = """
-QPushButton#primary, QPushButton#secondary {
-    font-size: 14px; font-weight: bold; padding: 10px 18px; border-radius: 6px;
-}
-QPushButton#primary { background: #2a82da; color: #ffffff; border: 1px solid #2a82da; }
-QPushButton#primary:hover { background: #3a8fe3; }
-QPushButton#primary:pressed { background: #2272c2; }
-QPushButton#secondary { background: #454545; color: #f2f2f2; border: 1px solid #5a5a5a; }
-QPushButton#secondary:hover { background: #4f4f4f; }
-QPushButton#secondary:pressed { background: #3d3d3d; }
-QPushButton#primary:disabled, QPushButton#secondary:disabled {
-    background: #3a3a3a; color: #7a7a7a; border: 1px solid #444444;
-}
-QPushButton#primary:focus, QPushButton#secondary:focus { border: 1px solid #9cc8f2; }
-"""
+def display_path(path: str) -> str:
+    """A folder as people read it: ~/Documents/Transcripts instead of the full home path."""
+    if not path:
+        return "Not set"
+    home = str(Path.home())
+    if sys.platform != "win32" and (path == home or path.startswith(home + os.sep)):
+        return "~" + path[len(home):]
+    return path
+
+
+def reveal_in_file_manager(path: str):
+    """Open the file manager with the file selected (only the folder on Linux)."""
+    if sys.platform == "darwin":
+        subprocess.Popen(["open", "-R", path])
+    elif sys.platform == "win32":
+        subprocess.Popen(["explorer", "/select,", os.path.normpath(path)])
+    else:
+        QDesktopServices.openUrl(QUrl.fromLocalFile(str(Path(path).parent)))
 
 
 class UpdateCheckWorker(QThread):
@@ -77,225 +74,457 @@ class UpdateCheckWorker(QThread):
             self.failed.emit(f"GitHub sent an answer {APP_NAME} can't read. Try again later.")
 
 
+def label(text: str, name: str = "") -> QLabel:
+    widget = QLabel(text)
+    if name:
+        widget.setObjectName(name)
+    return widget
+
+
+def button(text: str, name: str = "", slot=None) -> QPushButton:
+    widget = QPushButton(text)
+    if name:
+        widget.setObjectName(name)
+    widget.setCursor(Qt.CursorShape.PointingHandCursor)
+    if slot:
+        widget.clicked.connect(slot)
+    return widget
+
+
+class PathField(QWidget):
+    """A folder shown in a well with a folder icon, and a Change… button."""
+
+    def __init__(self, window: "MainWindow", path: str, on_change, parent=None):
+        super().__init__(parent)
+        layout = QHBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(8)
+        well = QFrame()
+        well.setObjectName("well")
+        well.setFixedHeight(28)
+        inner = QHBoxLayout(well)
+        inner.setContentsMargins(8, 0, 8, 0)
+        inner.setSpacing(8)
+        self.icon = QLabel()
+        inner.addWidget(self.icon)
+        self.text = ElidedLabel()
+        inner.addWidget(self.text, 1)
+        layout.addWidget(well, 1)
+        self.change_btn = button("Change…", slot=on_change)
+        layout.addWidget(self.change_btn)
+        window.on_theme(lambda t: self.icon.setPixmap(theme.icon("folder", t.muted).pixmap(16, 16)))
+        self.set_path(path)
+
+    def set_path(self, path: str):
+        self.text.setText(display_path(path))
+        self.text.setToolTip(path)
+
+
+class SettingsWindow(QDialog):
+    """Things set once: where models and error logs go, and the update check."""
+
+    def __init__(self, window: "MainWindow"):
+        super().__init__(window)
+        self.setObjectName("settings")
+        self.setWindowTitle("Settings")
+        self.setMinimumWidth(520)
+        grid = QGridLayout(self)
+        grid.setContentsMargins(24, 24, 24, 24)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(4)
+        grid.setColumnMinimumWidth(0, 112)
+        grid.setColumnStretch(1, 1)
+        right = Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter
+
+        grid.addWidget(label("Models folder"), 0, 0, right)
+        self.models_field = PathField(window, window.settings.models_dir, window.select_models_dir)
+        grid.addWidget(self.models_field, 0, 1)
+        grid.addWidget(label("Downloaded models are kept here", "caption"), 1, 1)
+        grid.setRowMinimumHeight(2, 16)
+
+        grid.addWidget(label("Error logs"), 3, 0, right)
+        self.logs_field = PathField(window, window.settings.error_log_dir, window.select_error_log_dir)
+        grid.addWidget(self.logs_field, 3, 1)
+        grid.addWidget(label("A file that fails gets a line in a log here", "caption"), 4, 1)
+        grid.setRowMinimumHeight(5, 20)
+
+        rule = QFrame()
+        rule.setObjectName("rule")
+        grid.addWidget(rule, 6, 0, 1, 2)
+        grid.setRowMinimumHeight(7, 20)
+
+        grid.addWidget(label("Updates"), 8, 0, right)
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self.update_btn = button("Check for updates", slot=window.check_for_updates)
+        row.addWidget(self.update_btn)
+        self.version_label = label(VERSION_TEXT, "secondary")
+        self.version_label.setFont(theme.figures(self.version_label.font()))
+        row.addWidget(self.version_label)
+        self.update_note = label("", "updateNote")
+        row.addWidget(self.update_note)
+        row.addStretch()
+        grid.addLayout(row, 8, 1)
+        grid.addWidget(label("One request to GitHub, only when you click", "caption"), 9, 1)
+        self.setFocusPolicy(Qt.FocusPolicy.ClickFocus)
+        self.refresh(window)
+
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.setFocus()  # no focus ring on the first button when the window opens
+
+    def refresh(self, window: "MainWindow"):
+        self.models_field.set_path(window.settings.models_dir)
+        self.logs_field.set_path(window.settings.error_log_dir)
+        self.models_field.change_btn.setEnabled(window.download_worker is None)
+        checking = window.update_worker is not None and window.update_worker.isRunning()
+        self.update_btn.setText("Checking…" if checking else "Check for updates")
+        self.update_btn.setEnabled(not checking)
+        self.update_note.setText(window.update_note)
+        self.update_note.setVisible(bool(window.update_note))
+
+
 class MainWindow(QMainWindow):
-    def __init__(self, store: SettingsStore | None = None):
+    def __init__(self, store: SettingsStore | None = None, dark: bool | None = None):
         super().__init__()
-        self.files = []
+        self.rows: list[FileRow] = []
+        self.batch_rows: list[FileRow] = []
         self.worker = None
         self.download_worker = None
         self.update_worker = None
         self.model = None
         self.model_loaded = False
+        self.loaded_model_name = ""
+        self.model_status = ""
+        self.update_note = ""
+        self.summary = ""
         self.settings_warning_shown = False
+        self.settings_window = None
+        self.forced_dark = dark
         self.store = store or SettingsStore()
         self.settings = self.store.load()
+        self._theme_hooks = []
+        self.tokens = theme.apply(QApplication.instance(), dark)
 
         self.init_ui()
+        self.init_menus()
+        self.refresh()
+        self.centralWidget().setFocus()
+        if dark is None:
+            QGuiApplication.styleHints().colorSchemeChanged.connect(lambda _scheme: self.apply_theme())
+
+    # --- Building the window -------------------------------------------------
+
+    def on_theme(self, hook):
+        """Run `hook(tokens)` now and again whenever the system appearance changes."""
+        self._theme_hooks.append(hook)
+        hook(self.tokens)
+
+    def apply_theme(self):
+        self.tokens = theme.apply(QApplication.instance(), self.forced_dark)
+        for hook in self._theme_hooks:
+            hook(self.tokens)
+        for row in self.rows:
+            row.retheme(self.tokens)
 
     def init_ui(self):
         self.setWindowTitle(APP_NAME)
-        self.setGeometry(100, 100, 950, 800)
-        self.set_dark_theme()
+        self.resize(860, 640)
+        self.setMinimumSize(680, 480)
+        self.setAcceptDrops(True)
 
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QVBoxLayout(central_widget)
-        main_layout.setSpacing(15)
-        main_layout.setContentsMargins(20, 20, 20, 20)
+        central = QWidget()
+        central.setFocusPolicy(Qt.FocusPolicy.ClickFocus)  # no focus ring on a control at launch
+        self.setCentralWidget(central)
+        root = QVBoxLayout(central)
+        root.setContentsMargins(0, 0, 0, 0)
+        root.setSpacing(0)
 
-        # Header: title, with the version button added at the end of init_ui (see below)
-        self.header_layout = QHBoxLayout()
-        self.header_layout.addStretch()
-        logo = QLabel()
-        logo.setPixmap(app_icon().pixmap(QSize(34, 34), logo.devicePixelRatioF()))  # sharp on Retina
-        logo.setAccessibleName(f"{APP_NAME} icon")
-        self.header_layout.addWidget(logo)
-        title = QLabel(APP_NAME)
-        title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
-        self.header_layout.addWidget(title)
-        main_layout.addLayout(self.header_layout)
+        root.addWidget(self.build_header())
 
-        # Models Directory Configuration
-        models_dir_group = QGroupBox("Models Directory")
-        models_dir_layout = QHBoxLayout()
+        body = QVBoxLayout()
+        body.setContentsMargins(16, 0, 16, 12)
+        body.setSpacing(8)
+        self.stack = QStackedWidget()
+        self.stack.addWidget(self.build_empty_view())
+        self.stack.addWidget(self.build_queue_view())
+        body.addWidget(self.stack, 1)
 
-        models_dir_layout.addWidget(QLabel("Models Folder:"))
-        self.models_dir_input = QLineEdit()
-        self.models_dir_input.setText(self.settings.models_dir)
-        self.models_dir_input.setReadOnly(True)
-        self.models_dir_input.setPlaceholderText("Click 'Browse' to select models directory")
-        models_dir_layout.addWidget(self.models_dir_input)
-
-        self.browse_models_dir_btn = QPushButton("Browse")
-        self.browse_models_dir_btn.clicked.connect(self.select_models_dir)
-        models_dir_layout.addWidget(self.browse_models_dir_btn)
-
-        models_dir_group.setLayout(models_dir_layout)
-        main_layout.addWidget(models_dir_group)
-
-        # Model Selection & Download
-        model_group = QGroupBox("Model Selection")
-        model_layout = QVBoxLayout()
-
-        model_select_layout = QHBoxLayout()
-        model_select_layout.addWidget(QLabel("Model:"))
-        self.model_combo = QComboBox()
-        for model_name in MODELS:
-            self.model_combo.addItem(f"{model_name} ({MODEL_SIZES[model_name]})", model_name)
-        self.model_combo.setCurrentIndex(self.model_combo.findData(DEFAULT_MODEL))
-        model_select_layout.addWidget(self.model_combo)
-
-        self.load_model_btn = QPushButton("Download && Load Model")  # "&&" shows one "&" in Qt
-        self.load_model_btn.setObjectName("secondary")
-        self.load_model_btn.setStyleSheet(BUTTON_STYLE)
-        self.load_model_btn.clicked.connect(self.download_and_load_model)
-        model_select_layout.addWidget(self.load_model_btn)
-
-        model_select_layout.addStretch()
-        model_layout.addLayout(model_select_layout)
-
-        self.download_progress = QProgressBar()
-        self.download_progress.setValue(0)
-        self.download_progress.setVisible(False)
-        model_layout.addWidget(self.download_progress)
-
-        self.model_status_label = QLabel("⚪ Model not loaded")
-        self.model_status_label.setStyleSheet("color: #ff9800; font-weight: bold;")
-        model_layout.addWidget(self.model_status_label)
-
-        model_group.setLayout(model_layout)
-        main_layout.addWidget(model_group)
-
-        # Output Settings
-        settings_group = QGroupBox("Output Settings")
-        settings_layout = QVBoxLayout()
-
-        output_dir_layout = QHBoxLayout()
-        output_dir_layout.addWidget(QLabel("Output Directory:"))
-        self.output_dir_input = QLineEdit()
-        self.output_dir_input.setText(self.settings.output_dir)
-        self.output_dir_input.setReadOnly(True)
-        self.output_dir_input.setPlaceholderText("Click 'Browse' to select output directory")
-        output_dir_layout.addWidget(self.output_dir_input)
-
-        self.browse_output_dir_btn = QPushButton("Browse")
-        self.browse_output_dir_btn.clicked.connect(self.select_output_dir)
-        output_dir_layout.addWidget(self.browse_output_dir_btn)
-        settings_layout.addLayout(output_dir_layout)
-
-        error_log_layout = QHBoxLayout()
-        error_log_layout.addWidget(QLabel("Error Log Directory:"))
-        self.error_log_input = QLineEdit()
-        self.error_log_input.setText(self.settings.error_log_dir)
-        self.error_log_input.setReadOnly(True)
-        self.error_log_input.setPlaceholderText("Click 'Browse' to select error log directory")
-        error_log_layout.addWidget(self.error_log_input)
-
-        self.browse_error_log_btn = QPushButton("Browse")
-        self.browse_error_log_btn.clicked.connect(self.select_error_log_dir)
-        error_log_layout.addWidget(self.browse_error_log_btn)
-        settings_layout.addLayout(error_log_layout)
-
-        formats_layout = QHBoxLayout()
-        formats_layout.addWidget(QLabel("Save As:"))
-        self.format_checks = {}
-        for ext, label in OUTPUT_FORMATS.items():
-            check = QCheckBox(label)
-            check.setChecked(ext in self.settings.output_formats)
-            check.toggled.connect(self.formats_changed)
-            formats_layout.addWidget(check)
-            self.format_checks[ext] = check
-        formats_layout.addStretch()
-        settings_layout.addLayout(formats_layout)
-
-        settings_group.setLayout(settings_layout)
-        main_layout.addWidget(settings_group)
-
-        # File selection
-        file_layout = QHBoxLayout()
-        self.select_file_btn = QPushButton("Select File(s)")
-        self.select_file_btn.clicked.connect(self.select_files)
-        file_layout.addWidget(self.select_file_btn)
-
-        self.clear_btn = QPushButton("Clear List")
-        self.clear_btn.clicked.connect(self.clear_files)
-        file_layout.addWidget(self.clear_btn)
-
-        file_layout.addStretch()
-        main_layout.addLayout(file_layout)
-
-        self.file_list = QListWidget()
-        self.file_list.setMaximumHeight(150)
-        main_layout.addWidget(QLabel("Selected Files:"))
-        main_layout.addWidget(self.file_list)
+        add_row = QHBoxLayout()
+        add_row.setContentsMargins(0, 0, 0, 0)
+        add_row.setSpacing(4)
+        self.add_btn = button("Add files", "quiet", self.select_files)
+        self.on_theme(lambda t: self.add_btn.setIcon(theme.icon("plus", t.text_2)))
+        add_row.addWidget(self.add_btn)
+        add_row.addStretch()
+        self.clear_btn = button("Clear", "quiet", self.clear_files)
+        add_row.addWidget(self.clear_btn)
+        self.add_row = QWidget()
+        self.add_row.setLayout(add_row)
+        body.addWidget(self.add_row)
+        root.addLayout(body, 1)
 
         self.progress_bar = QProgressBar()
-        self.progress_bar.setValue(0)
-        main_layout.addWidget(self.progress_bar)
+        self.progress_bar.setObjectName("thin")
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setVisible(False)
+        root.addWidget(self.progress_bar)
 
-        self.status_label = QLabel("Ready - Select a model and click 'Download & Load Model'")
-        self.status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
-        main_layout.addWidget(self.status_label)
+        root.addWidget(self.build_footer())
 
-        stats_group = QGroupBox("Statistics")
-        stats_layout = QVBoxLayout()
-        self.stats_text = QTextEdit()
-        self.stats_text.setReadOnly(True)
-        self.stats_text.setMaximumHeight(150)
-        self.stats_text.setPlaceholderText("Statistics will appear here after transcription...")
-        stats_layout.addWidget(self.stats_text)
-        stats_group.setLayout(stats_layout)
-        main_layout.addWidget(stats_group)
+    def build_header(self) -> QWidget:
+        header = QWidget()
+        layout = QHBoxLayout(header)
+        layout.setContentsMargins(20, 16, 16, 16)
+        layout.setSpacing(8)
 
-        # Control buttons
-        button_layout = QHBoxLayout()
-        self.start_btn = QPushButton("Start Transcription")
-        self.start_btn.setObjectName("primary")
-        self.start_btn.setStyleSheet(BUTTON_STYLE)
-        self.start_btn.setEnabled(False)  # Disabled until model is loaded
-        self.start_btn.clicked.connect(self.start_transcription)
-        button_layout.addWidget(self.start_btn)
+        layout.addWidget(label("Queue", "title"))
+        self.count_label = label("", "meta")
+        self.count_label.setFont(theme.figures(self.count_label.font()))
+        layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignBottom)
+        layout.addStretch()
 
-        self.cancel_btn = QPushButton("Cancel")
-        self.cancel_btn.setEnabled(False)
-        self.cancel_btn.setObjectName("secondary")
-        self.cancel_btn.setStyleSheet(BUTTON_STYLE)
-        self.cancel_btn.clicked.connect(self.cancel_transcription)
-        button_layout.addWidget(self.cancel_btn)
+        layout.addWidget(label("Model", "secondary"))
+        self.model_combo = ModelPopup()
+        for name in MODELS:
+            self.model_combo.addItem(f"{name}  ·  {MODEL_SIZES[name].lstrip('~')}", name)
+        self.model_combo.setCurrentIndex(self.model_combo.findData(DEFAULT_MODEL))
+        self.model_combo.setAccessibleName("Model")
+        self.model_combo.currentIndexChanged.connect(lambda _i: self.refresh())
+        self.on_theme(lambda t: setattr(self.model_combo, "tokens", t))
+        layout.addWidget(self.model_combo)
+        layout.addSpacing(4)
 
-        main_layout.addLayout(button_layout)
+        self.state_dot = QLabel()
+        self.state_dot.setObjectName("stateDot")
+        self.state_dot.setFixedSize(6, 6)
+        layout.addWidget(self.state_dot)
+        self.state_label = label("", "secondary")
+        self.state_label.setFont(theme.figures(self.state_label.font()))
+        layout.addWidget(self.state_label)
+        self.load_model_btn = button("Load", slot=self.download_and_load_model)
+        layout.addWidget(self.load_model_btn)
+        return header
 
-        # Version button: created last so it comes after the main content in the tab order
-        self.version_btn = QPushButton(VERSION_TEXT)
-        self.version_btn.setObjectName("version")
-        self.version_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.version_btn.setToolTip("Check for updates")
-        self.version_btn.setAccessibleName(f"Version {VERSION_TEXT}")
-        self.version_btn.setAccessibleDescription("Check GitHub for a newer release.")
-        self.version_btn.setStyleSheet(VERSION_STYLE.format(color=VERSION_MUTED))
-        self.version_btn.clicked.connect(self.check_for_updates)
-        self.header_layout.addWidget(self.version_btn, alignment=Qt.AlignmentFlag.AlignBottom)
-        self.header_layout.addStretch()
+    def build_empty_view(self) -> QWidget:
+        self.empty_card = QFrame()
+        self.empty_card.setObjectName("emptyCard")
+        layout = QVBoxLayout(self.empty_card)
+        layout.setContentsMargins(32, 32, 32, 32)
+        layout.setSpacing(0)
+        layout.addStretch()
+        self.glyph = Glyph()
+        self.on_theme(lambda t: (setattr(self.glyph, "tokens", t), self.glyph.update()))
+        layout.addWidget(self.glyph, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(16)
+        layout.addWidget(label("Drop recordings here", "emptyTitle"), alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(8)
+        body = label(f"{APP_NAME} writes what was said into text and subtitle files.\n"
+                     "Nothing leaves this computer.", "emptyBody")
+        body.setAlignment(Qt.AlignmentFlag.AlignHCenter)
+        layout.addWidget(body, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(20)
+        self.empty_add_btn = button("Add files…", slot=self.select_files)
+        layout.addWidget(self.empty_add_btn, alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addSpacing(12)
+        kinds = ", ".join(e.upper() for e in AUDIO_EXTENSIONS)
+        layout.addWidget(label(f"{kinds} and other audio or video", "caption"),
+                         alignment=Qt.AlignmentFlag.AlignHCenter)
+        layout.addStretch()
+        return self.empty_card
 
-        self.browse_models_dir_btn.setFocus()
+    def build_queue_view(self) -> QWidget:
+        self.queue_card = QFrame()
+        self.queue_card.setObjectName("card")
+        layout = QVBoxLayout(self.queue_card)
+        layout.setContentsMargins(1, 1, 1, 1)
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        rows = QWidget()
+        rows.setObjectName("rows")
+        self.rows_layout = QVBoxLayout(rows)
+        self.rows_layout.setContentsMargins(0, 0, 0, 0)
+        self.rows_layout.setSpacing(0)
+        self.rows_layout.addStretch()
+        scroll.setWidget(rows)
+        layout.addWidget(scroll)
+        return self.queue_card
 
-    def set_dark_theme(self):
-        palette = QPalette()
-        palette.setColor(QPalette.ColorRole.Window, QColor(53, 53, 53))
-        palette.setColor(QPalette.ColorRole.WindowText, Qt.GlobalColor.white)
-        palette.setColor(QPalette.ColorRole.Base, QColor(35, 35, 35))
-        palette.setColor(QPalette.ColorRole.AlternateBase, QColor(53, 53, 53))
-        palette.setColor(QPalette.ColorRole.ToolTipBase, QColor(25, 25, 25))
-        palette.setColor(QPalette.ColorRole.ToolTipText, Qt.GlobalColor.white)
-        palette.setColor(QPalette.ColorRole.Text, Qt.GlobalColor.white)
-        palette.setColor(QPalette.ColorRole.Button, QColor(53, 53, 53))
-        palette.setColor(QPalette.ColorRole.ButtonText, Qt.GlobalColor.white)
-        palette.setColor(QPalette.ColorRole.BrightText, Qt.GlobalColor.red)
-        palette.setColor(QPalette.ColorRole.Link, QColor(42, 130, 218))
-        palette.setColor(QPalette.ColorRole.Highlight, QColor(42, 130, 218))
-        palette.setColor(QPalette.ColorRole.HighlightedText, Qt.GlobalColor.black)
-        self.setPalette(palette)
+    def build_footer(self) -> QWidget:
+        footer = QFrame()
+        footer.setObjectName("footer")
+        grid = QGridLayout(footer)
+        grid.setContentsMargins(20, 12, 16, 16)
+        grid.setHorizontalSpacing(12)
+        grid.setVerticalSpacing(8)
+        grid.setColumnStretch(1, 1)
+        left = Qt.AlignmentFlag.AlignLeft | Qt.AlignmentFlag.AlignVCenter
+
+        grid.addWidget(label("Save to", "secondary"), 0, 0, left)
+        save_row = QHBoxLayout()
+        save_row.setSpacing(8)
+        self.output_icon = QLabel()
+        self.on_theme(lambda t: self.output_icon.setPixmap(theme.icon("folder", t.muted).pixmap(16, 16)))
+        save_row.addWidget(self.output_icon)
+        self.output_label = ElidedLabel()
+        save_row.addWidget(self.output_label)
+        self.browse_output_dir_btn = button("Change…", "quiet", self.select_output_dir)
+        save_row.addWidget(self.browse_output_dir_btn)
+        save_row.addStretch()
+        grid.addLayout(save_row, 0, 1)
+
+        grid.addWidget(label("Formats", "secondary"), 1, 0, left)
+        chips = QHBoxLayout()
+        chips.setSpacing(6)
+        self.format_checks = {}
+        for ext, name in FORMAT_CHIPS.items():
+            chip = button(name, "chip")
+            chip.setCheckable(True)
+            chip.setChecked(ext in self.settings.output_formats)
+            chip.setToolTip(OUTPUT_FORMATS[ext])
+            chip.setIconSize(QSize(12, 12))
+            chip.toggled.connect(self.formats_changed)
+            chips.addWidget(chip)
+            self.format_checks[ext] = chip
+        self.on_theme(lambda t: self.paint_chips())
+        chips.addStretch()
+        grid.addLayout(chips, 1, 1)
+
+        actions = QHBoxLayout()
+        actions.setSpacing(8)
+        self.hint_label = label("", "hint")
+        self.hint_label.setFont(theme.figures(self.hint_label.font()))
+        actions.addWidget(self.hint_label)
+        actions.addSpacing(4)
+        self.cancel_btn = button("Stop", slot=self.cancel_transcription)
+        actions.addWidget(self.cancel_btn)
+        self.start_btn = button("Transcribe", "primary", self.start_transcription)
+        actions.addWidget(self.start_btn)
+        grid.addLayout(actions, 1, 2, Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
+        return footer
+
+    def init_menus(self):
+        menu_bar = self.menuBar()
+
+        def action(text, slot, shortcut=None, role=None) -> QAction:
+            item = QAction(text, self)
+            item.triggered.connect(slot)
+            if shortcut is not None:
+                item.setShortcut(QKeySequence(shortcut))
+            if role is not None:
+                item.setMenuRole(role)
+            return item
+
+        file_menu = menu_bar.addMenu("File")
+        self.add_action = action("Add Files…", self.select_files, QKeySequence.StandardKey.Open)
+        file_menu.addAction(self.add_action)
+        file_menu.addSeparator()
+        # On macOS Qt moves these two into the Verbatica menu
+        file_menu.addAction(action("Settings…", self.show_settings, QKeySequence.StandardKey.Preferences,
+                                   QAction.MenuRole.PreferencesRole))
+        file_menu.addAction(action("Check for Updates…", self.check_for_updates, None,
+                                   QAction.MenuRole.ApplicationSpecificRole))
+        file_menu.addSeparator()
+        file_menu.addAction(action("Close Window", self.close, QKeySequence.StandardKey.Close))
+        if sys.platform != "darwin":
+            file_menu.addAction(action("Quit", QApplication.quit, QKeySequence.StandardKey.Quit,
+                                       QAction.MenuRole.QuitRole))
+
+        queue_menu = menu_bar.addMenu("Queue")
+        self.start_action = action("Transcribe", self.start_transcription, "Ctrl+Return")
+        self.cancel_action = action("Stop", self.cancel_transcription, "Ctrl+.")
+        self.clear_action = action("Remove All Files", self.clear_files)
+        for item in (self.start_action, self.cancel_action):
+            queue_menu.addAction(item)
+        queue_menu.addSeparator()
+        queue_menu.addAction(self.clear_action)
+
+    def paint_chips(self):
+        for chip in self.format_checks.values():
+            chip.setIcon(theme.icon("check-small", self.tokens.text) if chip.isChecked() else QIcon())
+
+    # --- One place that sets what is shown and enabled -----------------------
+
+    def refresh(self):
+        running = self.worker is not None and self.worker.isRunning()
+        downloading = self.download_worker is not None
+        has_rows = bool(self.rows)
+        pending = [r for r in self.rows if r.state in ("waiting", "failed", "stopped")]
+
+        self.stack.setCurrentIndex(1 if has_rows else 0)
+        self.add_row.setVisible(has_rows)
+        done = sum(r.state == "done" for r in self.rows)
+        files = f"{len(self.rows)} file{'s' if len(self.rows) != 1 else ''}"
+        self.count_label.setText(f"{files}  ·  {done} done" if done else files if has_rows else "")
+
+        # Model
+        selected = self.model_combo.currentData()
+        self.model_combo.setEnabled(not downloading)
+        self.load_model_btn.setEnabled(not downloading)
+        if downloading:
+            self.set_state("busy", self.model_status or "Starting")
+            self.load_model_btn.setVisible(False)
+        elif self.model_loaded and self.loaded_model_name == selected:
+            self.set_state("ready", "Loaded")
+            self.load_model_btn.setVisible(False)
+        else:
+            if self.model_loaded:
+                self.set_state("ready", f"{self.loaded_model_name} loaded")
+            else:
+                self.set_state(None, "")
+            downloaded = bool(self.settings.models_dir) and is_downloaded(self.settings.models_dir, selected)
+            self.load_model_btn.setText("Load" if downloaded else f"Download {MODEL_SIZES[selected].lstrip('~')}")
+            self.load_model_btn.setVisible(True)
+
+        # Footer
+        self.output_label.setText(display_path(self.settings.output_dir) if self.settings.output_dir
+                                  else "Choose a folder")
+        self.output_label.setToolTip(self.settings.output_dir)
+        for widget in (self.browse_output_dir_btn, *self.format_checks.values()):
+            widget.setEnabled(not running)
+        self.clear_btn.setEnabled(not running)
+        self.clear_action.setEnabled(not running and has_rows)
+        for row in self.rows:
+            row.set_busy(running)
+
+        ready = (self.model_loaded and bool(pending) and bool(self.settings.output_formats)
+                 and bool(self.settings.output_dir) and not running)
+        self.start_btn.setEnabled(ready)
+        self.start_action.setEnabled(ready)
+        self.cancel_btn.setVisible(running)
+        self.cancel_action.setEnabled(running)
+        self.progress_bar.setVisible(running)
+
+        if running:
+            index = next((i for i, r in enumerate(self.batch_rows) if r.state == "active"), 0)
+            hint = f"File {index + 1} of {len(self.batch_rows)}"
+        elif not has_rows:
+            hint = ""
+        elif not self.model_loaded:
+            hint = "Load a model to start"
+        elif not self.settings.output_dir:
+            hint = "Choose where to save"
+        elif not self.settings.output_formats:
+            hint = "Choose a format"
+        elif not pending:
+            hint = self.summary or "All files transcribed"
+        else:
+            hint = self.summary
+        self.hint_label.setText(hint)
+
+        if self.settings_window is not None:
+            self.settings_window.refresh(self)
+
+    def set_state(self, state, text: str):
+        self.state_dot.setVisible(state is not None)
+        self.state_label.setVisible(bool(text))
+        self.state_label.setText(text)
+        if state is not None:
+            self.state_dot.setProperty("state", state)
+            self.state_dot.style().unpolish(self.state_dot)
+            self.state_dot.style().polish(self.state_dot)
 
     # --- Settings ------------------------------------------------------------
 
@@ -314,82 +543,79 @@ class MainWindow(QMainWindow):
                 "Your choices stay in use until you close the app.",
             )
 
+    def show_settings(self):
+        if self.settings_window is None:
+            self.settings_window = SettingsWindow(self)
+        self.settings_window.refresh(self)
+        self.settings_window.show()
+        self.settings_window.raise_()
+        self.settings_window.activateWindow()
+
     def select_models_dir(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Models Directory", self.settings.models_dir)
+        directory = QFileDialog.getExistingDirectory(self, "Choose Models Folder", self.settings.models_dir)
         if directory:
             self.settings.models_dir = directory
-            self.models_dir_input.setText(directory)
             self.save_settings()
-            self.status_label.setText("Models directory set - Select a model and click 'Download & Load Model'")
-            self.status_label.setStyleSheet("color: #2196F3; font-size: 14px; font-weight: bold;")
+            self.refresh()
 
     def select_error_log_dir(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Error Log Directory", self.settings.error_log_dir)
+        directory = QFileDialog.getExistingDirectory(self, "Choose Error Log Folder", self.settings.error_log_dir)
         if directory:
             self.settings.error_log_dir = directory
-            self.error_log_input.setText(directory)
             self.save_settings()
+            self.refresh()
 
     def select_output_dir(self):
-        directory = QFileDialog.getExistingDirectory(self, "Select Output Directory for Transcriptions",
+        directory = QFileDialog.getExistingDirectory(self, "Choose Where to Save Transcripts",
                                                      self.settings.output_dir)
         if directory:
             self.settings.output_dir = directory
-            self.output_dir_input.setText(directory)
             self.save_settings()
+            self.refresh()
 
     def formats_changed(self):
         self.settings.output_formats = [ext for ext, check in self.format_checks.items() if check.isChecked()]
+        self.paint_chips()
         self.save_settings()
+        self.refresh()
 
     # --- Model ---------------------------------------------------------------
 
     def download_and_load_model(self):
         if not self.settings.models_dir:
-            QMessageBox.warning(self, "Warning", "Please select a models directory first!")
+            QMessageBox.warning(self, "No Models Folder", "Choose a models folder in Settings first.")
             return
         self.start_model_worker(self.model_combo.currentData(), replace_existing=False)
 
     def start_model_worker(self, model_name, replace_existing):
-        self.load_model_btn.setEnabled(False)
-        self.model_combo.setEnabled(False)
-        self.browse_models_dir_btn.setEnabled(False)
-        self.download_progress.setVisible(True)
-        self.download_progress.setValue(0)
-
+        self.model_status = "Starting"
         self.download_worker = ModelDownloadWorker(model_name, self.settings.models_dir, replace_existing)
-        self.download_worker.progress.connect(self.download_progress.setValue)
         self.download_worker.status.connect(self.update_download_status)
         self.download_worker.model_loaded.connect(self.model_ready)
         self.download_worker.corrupt_file.connect(self.corrupt_model_file)
         self.download_worker.error.connect(self.download_error)
         self.download_worker.start()
+        self.refresh()
 
     def update_download_status(self, message):
-        self.model_status_label.setText(message)
-        self.model_status_label.setStyleSheet("color: #2196F3; font-weight: bold;")
+        self.model_status = message
+        self.refresh()
 
-    def reenable_model_controls(self):
-        self.load_model_btn.setEnabled(True)
-        self.model_combo.setEnabled(True)
-        self.browse_models_dir_btn.setEnabled(True)
-        self.download_progress.setVisible(False)
+    def model_worker_done(self):
+        self.download_worker = None
+        self.model_status = ""
 
     def model_ready(self, model, model_name):
         # The model was loaded in the worker thread, so the window stays responsive
         self.model = model
         self.model_loaded = True
-        self.model_status_label.setText(f"✅ Model '{model_name}' loaded and ready")
-        self.model_status_label.setStyleSheet("color: #4CAF50; font-weight: bold;")
-        self.status_label.setText("Ready to transcribe")
-        self.status_label.setStyleSheet("color: #4CAF50; font-size: 14px; font-weight: bold;")
-        self.start_btn.setEnabled(True)
-        self.reenable_model_controls()
+        self.loaded_model_name = model_name
+        self.model_worker_done()
+        self.refresh()
 
     def corrupt_model_file(self, model_name, model_folder):
-        self.reenable_model_controls()
-        self.model_status_label.setText("❌ Model files are incomplete or damaged")
-        self.model_status_label.setStyleSheet("color: #f44336; font-weight: bold;")
+        self.model_worker_done()
+        self.refresh()
         reply = QMessageBox.question(
             self,
             "Damaged Model Files",
@@ -402,140 +628,170 @@ class MainWindow(QMainWindow):
             self.start_model_worker(model_name, replace_existing=True)
 
     def download_error(self, message):
-        self.model_status_label.setText(f"❌ {message}")
-        self.model_status_label.setStyleSheet("color: #f44336; font-weight: bold;")
-        QMessageBox.critical(self, "Model Error", message)
-        self.reenable_model_controls()
+        self.model_worker_done()
+        self.refresh()
+        QMessageBox.critical(self, "Model Not Loaded", message)
 
-    # --- Files and transcription ---------------------------------------------
+    # --- Queue ---------------------------------------------------------------
+
+    @property
+    def files(self) -> list:
+        return [row.path for row in self.rows]
 
     def select_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, "Select Audio Files", "", AUDIO_FILE_FILTER)
+        files, _ = QFileDialog.getOpenFileNames(self, "Add Files", "", AUDIO_FILE_FILTER)
         if files:
-            skipped = add_unique_files(self.files, files)
-            self.file_list.clear()
-            self.file_list.addItems([Path(f).name for f in self.files])
-            if skipped:
-                self.status_label.setText(f"Skipped {skipped} file(s) already in the list")
-                self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
+            self.add_files(files)
+
+    def add_files(self, paths):
+        known = self.files
+        skipped = add_unique_files(known, paths)
+        for path in known[len(self.rows):]:
+            row = FileRow(path)
+            row.remove_requested.connect(self.remove_row)
+            row.reveal_requested.connect(lambda r: reveal_in_file_manager(r.output_file))
+            row.setProperty("first", not self.rows)
+            self.rows_layout.insertWidget(self.rows_layout.count() - 1, row)
+            self.rows.append(row)
+        self.summary = f"Skipped {skipped} file{'s' if skipped != 1 else ''} already in the queue" if skipped else ""
+        self.refresh()
+
+    def remove_row(self, row: FileRow):
+        if self.worker is not None and self.worker.isRunning():
+            return
+        self.rows.remove(row)
+        row.setParent(None)
+        row.deleteLater()
+        if self.rows:
+            self.rows[0].setProperty("first", True)
+            self.rows[0].style().polish(self.rows[0])
+        self.refresh()
 
     def clear_files(self):
-        self.files = []
-        self.file_list.clear()
-        self.stats_text.clear()
+        if self.worker is not None and self.worker.isRunning():
+            return
+        for row in self.rows:
+            row.setParent(None)
+            row.deleteLater()
+        self.rows = []
+        self.summary = ""
+        self.refresh()
 
-    def set_controls_enabled(self, enabled):
-        for widget in (self.start_btn, self.select_file_btn, self.clear_btn, self.load_model_btn,
-                       self.browse_models_dir_btn, self.browse_error_log_btn, self.browse_output_dir_btn,
-                       self.model_combo, *self.format_checks.values()):
-            widget.setEnabled(enabled)
-        self.cancel_btn.setEnabled(not enabled)
+    def dragEnterEvent(self, event):
+        if any(url.isLocalFile() and Path(url.toLocalFile()).is_file() for url in event.mimeData().urls()):
+            event.acceptProposedAction()
+            self.set_dropping(True)
+
+    def dragLeaveEvent(self, event):
+        self.set_dropping(False)
+
+    def dropEvent(self, event):
+        self.set_dropping(False)
+        paths = [url.toLocalFile() for url in event.mimeData().urls()
+                 if url.isLocalFile() and Path(url.toLocalFile()).is_file()]
+        if paths:
+            event.acceptProposedAction()
+            self.add_files(paths)
+
+    def set_dropping(self, on: bool):
+        for card in (self.empty_card, self.queue_card):
+            card.setProperty("dropping", on)
+            card.style().unpolish(card)
+            card.style().polish(card)
+
+    # --- Transcription -------------------------------------------------------
 
     def start_transcription(self):
-        if not self.model_loaded:
-            QMessageBox.warning(self, "Warning", "Please load a model first!")
+        pending = [r for r in self.rows if r.state in ("waiting", "failed", "stopped")]
+        if not self.model_loaded or not pending or self.worker is not None and self.worker.isRunning():
             return
-
-        if not self.files:
-            self.status_label.setText("⚠️ Please select at least one file")
-            self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
-            return
-
-        if not self.settings.output_dir:
-            QMessageBox.warning(self, "Warning", "Please select an output directory for transcriptions!")
-            return
-
-        if not self.settings.output_formats:
-            QMessageBox.warning(self, "Warning", "Please choose at least one output format under 'Save As'!")
+        if not self.settings.output_dir or not self.settings.output_formats:
             return
 
         if not self.settings.error_log_dir:
             reply = QMessageBox.question(
                 self,
-                "No Error Log Directory",
-                "You haven't set an error log directory. Errors will not be saved to a log file.\n\nContinue anyway?",
+                "No Error Log Folder",
+                "No error log folder is set, so errors will not be saved to a log file.\n\nContinue?",
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             )
             if reply == QMessageBox.StandardButton.No:
                 return
 
-        self.set_controls_enabled(False)
+        self.batch_rows = pending
+        for row in pending:
+            row.waveform.set_fraction(0, animate=False)
+            row.set_state("waiting")
+        self.summary = ""
         self.progress_bar.setValue(0)
-        self.stats_text.clear()
 
         self.worker = TranscriptionWorker(
-            self.files,
+            [row.path for row in pending],
             self.model,
             self.settings.output_dir,
             self.settings.error_log_dir,
             self.settings.output_formats,
         )
         self.worker.progress.connect(self.progress_bar.setValue)
-        self.worker.status.connect(self.update_status)
+        self.worker.file_started.connect(self.file_started)
+        self.worker.file_audio.connect(lambda i, peaks, duration: self.batch_rows[i].set_audio(peaks, duration))
+        self.worker.file_progress.connect(lambda i, fraction: self.batch_rows[i].set_progress(fraction))
         self.worker.file_complete.connect(self.file_completed)
-        self.worker.all_complete.connect(self.all_completed)
         self.worker.error.connect(self.show_error)
-        self.worker.finished.connect(lambda: self.set_controls_enabled(True))
+        self.worker.all_complete.connect(self.all_completed)
+        self.worker.finished.connect(self.refresh)
         self.worker.start()
+        self.refresh()
 
-    def update_status(self, message):
-        self.status_label.setText(message)
-        self.status_label.setStyleSheet("color: #2196F3; font-size: 14px; font-weight: bold;")
+    def file_started(self, index):
+        self.batch_rows[index].set_state("active")
+        self.refresh()
 
-    def file_completed(self, filename, duration, word_count):
-        self.stats_text.append(f"✓ {filename}: {duration:.2f}s, {word_count} words")
+    def file_completed(self, index, output_base, seconds_taken, word_count):
+        self.batch_rows[index].set_done(output_base, self.settings.output_formats, seconds_taken, word_count)
+        self.refresh()
 
-    def show_error(self, filename, error):
-        self.stats_text.append(f"✗ {filename}: ERROR - {error}")
+    def show_error(self, index, filename, error):
+        if index < 0:  # the error log itself could not be written
+            QMessageBox.warning(self, "Error Log Not Saved", error)
+            return
+        self.batch_rows[index].set_state("failed", error)
+        self.refresh()
 
     def all_completed(self, total_time, total_words, successful_files, error_count, cancelled):
+        for row in self.batch_rows:
+            if row.state == "active":
+                row.set_state("stopped")
         if cancelled:
-            self.status_label.setText(f"⏹ Cancelled - {successful_files} of {len(self.files)} file(s) transcribed")
-            self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
-        elif error_count == 0:
-            self.status_label.setText("✅ All transcriptions complete!")
-            self.status_label.setStyleSheet("color: #4CAF50; font-size: 14px; font-weight: bold;")
+            self.summary = f"Stopped after {successful_files} of {len(self.batch_rows)}"
+        elif error_count:
+            where = " · see the error log" if self.settings.error_log_dir else ""
+            self.summary = f"{error_count} failed{where}"
         else:
-            self.status_label.setText(f"⚠️ Completed with {error_count} error(s)")
-            self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
-
-        stats = f"\n{'=' * 50}\n"
-        stats += f"Total time: {total_time:.2f}s\n"
-        stats += f"Total words: {total_words}\n"
-        stats += f"Files processed: {successful_files}/{len(self.files)}\n"
-        if successful_files > 0:
-            stats += f"Average: {total_time / successful_files:.2f}s per file\n"
-        if error_count > 0 and self.settings.error_log_dir:
-            stats += f"\n⚠️ {error_count} file(s) failed - check error log in:\n{self.settings.error_log_dir}\n"
-        self.stats_text.append(stats)
+            self.summary = f"{total_words:,} words in {format_taken(total_time)}"
+        self.refresh()
 
     def cancel_transcription(self):
-        if self.worker:
+        if self.worker is not None and self.worker.isRunning():
             self.worker.cancel()
-            self.status_label.setText("Cancelling...")
-            self.status_label.setStyleSheet("color: #ff9800; font-size: 14px; font-weight: bold;")
+            self.cancel_btn.setEnabled(False)
+            self.hint_label.setText("Stopping after this part")
 
     # --- Update check --------------------------------------------------------
 
     def check_for_updates(self):
         if self.update_worker and self.update_worker.isRunning():
             return
-        self.version_btn.setText("checking…")
-        self.version_btn.setEnabled(False)
         self.update_worker = UpdateCheckWorker()
         self.update_worker.result.connect(self.show_update_result)
         self.update_worker.failed.connect(self.show_update_error)
-        self.update_worker.finished.connect(self.update_check_finished)
+        self.update_worker.finished.connect(self.refresh)
         self.update_worker.start()
-
-    def update_check_finished(self):
-        self.version_btn.setText(VERSION_TEXT)
-        self.version_btn.setEnabled(True)
+        self.refresh()
 
     def show_update_result(self, info):
-        self.update_check_finished()
         box = QMessageBox(self)
-        box.setWindowTitle("Check for updates")
+        box.setWindowTitle("Check for Updates")
         offer_page = True
         if info.dev_build:
             box.setText("This is a development build.")
@@ -543,16 +799,16 @@ class MainWindow(QMainWindow):
         elif info.newer:
             box.setText(f"{APP_NAME} {info.latest} is available.")
             box.setInformativeText(f"You have {VERSION_TEXT}. Open the release page to download the new version.")
-            self.version_btn.setStyleSheet(VERSION_STYLE.format(color=VERSION_ACCENT))
-            self.version_btn.setToolTip(f"{info.latest} is available. Click for details.")
+            self.update_note = f"{info.latest} is available"
         else:
             box.setText(f"{APP_NAME} is up to date.")
             box.setInformativeText(f"{info.latest} is the latest release.")
             offer_page = False
+        self.refresh()
 
         open_btn = None
         if offer_page:
-            open_btn = box.addButton("Open release page", QMessageBox.ButtonRole.AcceptRole)
+            open_btn = box.addButton("Open Release Page", QMessageBox.ButtonRole.AcceptRole)
             if info.notes:
                 box.setDetailedText(info.notes)
         close_btn = box.addButton("Close", QMessageBox.ButtonRole.RejectRole)
@@ -562,13 +818,13 @@ class MainWindow(QMainWindow):
             QDesktopServices.openUrl(QUrl(info.url))
 
     def show_update_error(self, message):
-        self.update_check_finished()
-        QMessageBox.warning(self, "Check for updates", message)
+        self.refresh()
+        QMessageBox.warning(self, "Check for Updates", message)
 
 
 def self_test() -> int:
     """Used by the release workflow: checks that a build includes faster-whisper, CTranslate2,
-    the audio decoder and the voice-activity model."""
+    the audio decoder, the voice-activity model and the SVG renderer for the icons."""
     import tempfile
     import wave
 
@@ -576,6 +832,7 @@ def self_test() -> int:
     import numpy as np
     from faster_whisper.audio import decode_audio
     from faster_whisper.vad import get_speech_timestamps
+    from PyQt6.QtSvg import QSvgRenderer  # noqa: F401
 
     if "int8" not in ctranslate2.get_supported_compute_types("cpu"):
         raise RuntimeError("CTranslate2 has no int8 support on this CPU")

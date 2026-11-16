@@ -17,7 +17,14 @@ OUTPUT_FORMATS = {
     ".vtt": "Subtitles (.vtt)",
 }
 
-AUDIO_FILE_FILTER = "Audio Files (*.mp3 *.wav *.m4a *.flac *.ogg *.mp4 *.avi *.mkv);;All Files (*)"
+AUDIO_EXTENSIONS = ("mp3", "m4a", "wav", "flac", "ogg", "mp4", "mov", "avi", "mkv")
+AUDIO_FILE_FILTER = f"Audio and Video ({' '.join('*.' + e for e in AUDIO_EXTENSIONS)});;All Files (*)"
+
+# faster-whisper decodes every file to 16 kHz mono before it transcribes it
+SAMPLE_RATE = 16000
+
+# Number of bars in the waveform the window draws for each file. The window merges bars to fit.
+WAVEFORM_BARS = 160
 
 # Skip long silences before transcribing. Faster, and avoids the text Whisper sometimes
 # invents in silent parts ("Thanks for watching!").
@@ -85,10 +92,41 @@ class TranscriptionCancelled(Exception):
     pass
 
 
-def transcribe_file(model, file_path, on_progress, should_cancel) -> dict:
+def waveform_peaks(audio, bars: int = WAVEFORM_BARS) -> list:
+    """Loudness of `bars` equal slices of the audio, from 0.0 to 1.0, for the window to draw.
+    Uses the RMS of each slice relative to the loudest slice. Silence stays near 0."""
+    import numpy as np
+
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.size == 0:
+        return [0.0] * bars
+    slices = np.array_split(audio, bars)
+    rms = np.array([float(np.sqrt(np.mean(np.square(s)))) if s.size else 0.0 for s in slices])
+    loudest = rms.max()
+    if loudest <= 1e-6:
+        return [0.0] * bars
+    # A small power curve lifts quiet speech, so a soft voice doesn't read as silence
+    return [round(float(v), 3) for v in np.power(rms / loudest, 0.7)]
+
+
+def load_audio(file_path):
+    """Decode a file the way faster-whisper does (16 kHz mono) and measure its waveform.
+    Returns (audio, peaks, duration in seconds). The audio is then handed to the model,
+    so each file is decoded only once."""
+    from faster_whisper.audio import decode_audio  # imported here because it loads PyAV
+
+    audio = decode_audio(str(file_path), sampling_rate=SAMPLE_RATE)
+    return audio, waveform_peaks(audio), len(audio) / SAMPLE_RATE
+
+
+def transcribe_file(model, file_path, on_progress, should_cancel, on_audio=lambda peaks, duration: None) -> dict:
     """Transcribe one file. faster-whisper returns segments one at a time as it decodes them
     (about every 30 seconds of audio), which gives progress and a point to stop after each one."""
-    segments, info = model.transcribe(str(file_path), vad_filter=VAD_FILTER, beam_size=BEAM_SIZE)
+    audio, peaks, duration = load_audio(file_path)
+    on_audio(peaks, duration)
+    if should_cancel():
+        raise TranscriptionCancelled()
+    segments, info = model.transcribe(audio, vad_filter=VAD_FILTER, beam_size=BEAM_SIZE)
     collected = []
     for segment in segments:
         if should_cancel():
@@ -102,11 +140,15 @@ def transcribe_file(model, file_path, on_progress, should_cancel) -> dict:
 
 
 class TranscriptionWorker(QThread):
-    progress = pyqtSignal(int)
-    status = pyqtSignal(str)
-    file_complete = pyqtSignal(str, float, int)
+    """Transcribes `files` in order. Per-file signals carry the file's index in `files`."""
+
+    progress = pyqtSignal(int)  # whole batch, 0-100
+    file_started = pyqtSignal(int)  # index
+    file_audio = pyqtSignal(int, object, float)  # index, waveform peaks, duration in seconds
+    file_progress = pyqtSignal(int, float)  # index, 0.0-1.0
+    file_complete = pyqtSignal(int, str, float, int)  # index, output path without extension, seconds taken, words
     all_complete = pyqtSignal(float, int, int, int, bool)  # time, words, succeeded, failed, cancelled
-    error = pyqtSignal(str, str)  # filename, error_message
+    error = pyqtSignal(int, str, str)  # index (-1 for the error log itself), file name, message
 
     def __init__(self, files, model, output_dir, error_log_dir, formats=(".txt",)):
         super().__init__()
@@ -129,7 +171,11 @@ class TranscriptionWorker(QThread):
                 break
 
             file_name = Path(file_path).name
-            self.status.emit(f"Transcribing {file_name} ({idx + 1}/{total_files})...")
+            self.file_started.emit(idx)
+
+            def on_progress(fraction, idx=idx):
+                self.file_progress.emit(idx, fraction)
+                self.progress.emit(int((idx + fraction) / total_files * 100))
 
             try:
                 # Transcribe, with progress and cancel checks inside the file
@@ -137,8 +183,9 @@ class TranscriptionWorker(QThread):
                 result = transcribe_file(
                     self.model,
                     file_path,
-                    lambda fraction: self.progress.emit(int((idx + fraction) / total_files * 100)),
+                    on_progress,
                     lambda: self.is_cancelled,
+                    lambda peaks, duration, idx=idx: self.file_audio.emit(idx, peaks, duration),
                 )
                 file_duration = time.time() - file_start
 
@@ -150,24 +197,19 @@ class TranscriptionWorker(QThread):
                 self.save_outputs(result, output_base)
 
                 successful_files += 1
-                label = file_name if output_base.name == Path(file_path).stem else f"{file_name} → {output_base.name}"
-                self.file_complete.emit(label, file_duration, word_count)
+                self.file_complete.emit(idx, str(output_base), file_duration, word_count)
 
             except TranscriptionCancelled:
                 break
 
             except Exception as e:
                 self.errors.append((file_name, str(e)))
-                self.error.emit(file_name, str(e))
-                self.status.emit(f"⚠️ Skipped {file_name} due to error")
+                self.error.emit(idx, file_name, str(e))
 
             self.progress.emit(int(((idx + 1) / total_files) * 100))
 
         if self.errors and self.error_log_dir:
             self.write_error_log()
-
-        if self.is_cancelled:
-            self.status.emit("Transcription cancelled")
 
         total_duration = time.time() - start_time
         self.all_complete.emit(total_duration, total_words, successful_files,
@@ -199,7 +241,7 @@ class TranscriptionWorker(QThread):
                     f.write(f"Error: {error}\n")
                     f.write("-" * 70 + "\n\n")
         except Exception as e:
-            self.error.emit("Error Log", f"Could not write error log: {e}")
+            self.error.emit(-1, "Error log", f"Could not write the error log: {e}")
 
     def cancel(self):
         self.is_cancelled = True

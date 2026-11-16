@@ -112,6 +112,16 @@ def model_folder(models_dir, name: str) -> Path:
     return Path(models_dir) / f"faster-whisper-{name}"
 
 
+def is_downloaded(models_dir, name: str) -> bool:
+    """True when every file of the model is present with the right size. A quick check for
+    the window's button label; the full checksum check runs when the model loads."""
+    folder = model_folder(models_dir, name)
+    try:
+        return all((folder / f).stat().st_size == size for f, size, _ in MODELS[name].files)
+    except OSError:
+        return False
+
+
 def file_url(info: ModelInfo, file_name: str) -> str:
     return f"{HF_BASE}/{info.repo}/resolve/{info.revision}/{file_name}"
 
@@ -133,7 +143,7 @@ def check_model_files(folder: Path, info: ModelInfo, on_status=lambda message: N
         if not path.exists():
             missing.append(name)
             continue
-        on_status(f"Verifying {name}...")
+        on_status(f"Checking {name}")
         if path.stat().st_size != size or file_sha256(path) != sha256:
             damaged.append(name)
     return missing, damaged
@@ -169,7 +179,7 @@ class ModelDownloadWorker(QThread):
             self.error.emit(f"Download failed: {e}")
             return
 
-        self.status.emit("⏳ Loading model into memory...")
+        self.status.emit("Loading")
         try:
             from faster_whisper import WhisperModel  # imported here because it loads CTranslate2
 
@@ -186,7 +196,7 @@ class ModelDownloadWorker(QThread):
         total = sum(size for _, size, _ in files)
         done_before = 0
         last_percent = [-1]
-        self.status.emit(f"Downloading {self.model_name} model ({human_size(total)})...")
+        self.status.emit("Downloading")
 
         for name, size, sha256 in files:
             target = folder / name
@@ -199,13 +209,13 @@ class ModelDownloadWorker(QThread):
                     return  # only update the UI when the percentage changes
                 last_percent[0] = percent
                 self.progress.emit(percent)
-                self.status.emit(f"Downloading: {downloaded / 1024 ** 2:.1f} MB / {total / 1024 ** 2:.1f} MB")
+                self.status.emit(f"Downloading {downloaded / 1024 ** 2:.0f} of {total / 1024 ** 2:.0f} MB")
 
             try:
                 urllib.request.urlretrieve(file_url(info, name), str(part_path), reporthook=report_progress)
-                self.status.emit(f"Verifying {name}...")
+                self.status.emit(f"Checking {name}")
                 if part_path.stat().st_size != size or file_sha256(part_path) != sha256:
-                    raise ValueError(f"{name} is damaged (checksum mismatch). Please try again.")
+                    raise ValueError(f"{name} arrived damaged (checksum mismatch). Try the download again.")
                 os.replace(part_path, target)
             except BaseException:
                 part_path.unlink(missing_ok=True)

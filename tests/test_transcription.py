@@ -132,3 +132,30 @@ def test_failed_file_is_logged_and_the_batch_continues(tmp_path):
     assert (tmp_path / "good.txt").exists()
     assert done[0][2:] == (1, 1, False)
     assert "cannot decode" in next(logs.iterdir()).read_text()
+
+
+# --- Waveform ----------------------------------------------------------------
+
+
+def test_worker_reports_each_files_waveform_and_progress(tmp_path):
+    model = FakeModel([(0, 30, "a"), (30, 60, "b")])
+    worker = tr.TranscriptionWorker([str(tmp_path / "a.mp3")], model, str(tmp_path), "", [".txt"])
+    started, audio, progress = collect(worker.file_started), collect(worker.file_audio), collect(worker.file_progress)
+    complete = collect(worker.file_complete)
+    worker.run()
+    assert started == [(0,)]
+    assert audio[0][0] == 0 and len(audio[0][1]) == tr.WAVEFORM_BARS and audio[0][2] == 60.0
+    assert progress == [(0, 0.5), (0, 1.0)]
+    assert complete[0][:2] == (0, str(tmp_path / "a"))
+
+
+def test_waveform_peaks_keep_silence_flat():
+    import pytest
+    np = pytest.importorskip("numpy")
+    loud = np.sin(np.linspace(0, 2000, 16000)).astype(np.float32)
+    audio = np.concatenate([loud, np.zeros(16000, dtype=np.float32), loud * 0.25])
+    peaks = tr.waveform_peaks(audio, bars=6)
+    assert peaks[0] == pytest.approx(1.0, abs=0.01)
+    assert peaks[2] == peaks[3] == 0.0  # the silent second
+    assert 0.2 < peaks[5] < 0.5  # quiet speech is lifted a little but stays quieter
+    assert tr.waveform_peaks(np.zeros(100, dtype=np.float32), bars=4) == [0.0] * 4
