@@ -1,0 +1,56 @@
+# Private
+Meta/
+
+# Python
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+
+# Build output (PyInstaller)
+build/
+dist/
+*.spec
+
+# App data created when run from source (settings, models, logs)
+Audio-Transcriber-data/
+
+# Whisper models saved anywhere in the project folder
+*.pt
+*.pt.part
+
+# OS
+.DS_Store
+Thumbs.db
+
+# AI tools
+.claude/
+CLAUDE.md
+CLAUDE.local.md
+AGENTS.md
+.agents/
+.codex/
+.gemini/
+GEMINI.md
+.cursor/
+.cursorrules
+.cursorignore
+.windsurf/
+.windsurfrules
+.codeium/
+.continue/
+.aider*
+.clinerules
+.cline/
+.roo/
+.roomodes
+.kiro/
+.junie/
+.amazonq/
+.specstory/
+.github/copilot-instructions.md
+.github/instructions/
+.github/prompts/
+.mcp.json
