@@ -16,6 +16,7 @@ dist/
 
 # App data created when run from source (settings, models, logs)
 Verbatica-data/
+Audio-Transcriber-data/
 
 # Whisper models saved anywhere in the project folder
 *.pt

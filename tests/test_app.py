@@ -11,6 +11,12 @@ def make_window(tmp_path):
     return app.MainWindow(SettingsStore(tmp_path / "app", legacy_file=tmp_path / "none.json"))
 
 
+def test_window_icon_loads_from_the_package_at_every_size():
+    icon = app.app_icon()
+    sizes = sorted(size.width() for size in icon.availableSizes())
+    assert sizes == [16, 32, 64, 256]
+
+
 def test_version_button_shows_the_version_and_comes_last_in_tab_order(tmp_path):
     window = make_window(tmp_path)
     button = window.version_btn
@@ -47,3 +53,11 @@ def test_newer_release_tints_the_version(tmp_path, monkeypatch):
     assert app.VERSION_ACCENT in window.version_btn.styleSheet()
     assert window.version_btn.toolTip() == "v1.1.0 is available. Click for details."
     assert window.version_btn.isEnabled()
+
+
+def test_self_test_with_real_faster_whisper():
+    """Decodes real audio and runs the voice-activity model. Skipped where faster-whisper
+    isn't installed (the CI test job); the release builds run the same check."""
+    import pytest
+    pytest.importorskip("faster_whisper")
+    assert app.self_test() == 0

@@ -6,11 +6,13 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "verbatica"
 dynamic = ["version"]
-description = "Transcribe audio and video files locally with OpenAI Whisper models."
+description = "Transcribe audio and video files locally with Whisper models (faster-whisper)."
 readme = "README.md"
 requires-python = ">=3.9"
 dependencies = [
-    "openai-whisper",
+    "faster-whisper",
+    # faster-whisper 1.2.1 passes av.open(metadata_errors=...), which PyAV 19 removed.
+    "av<19",
     "PyQt6",
 ]
 

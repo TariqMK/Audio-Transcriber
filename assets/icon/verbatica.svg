@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Verbatica master icon: a waveform that ends in a text cursor (heard, then typed). -->
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="#262626" stroke="#3a3a3a" stroke-width="6"/>
+  <g fill="#f2f2f2">
+    <rect x="250" y="432" width="46" height="160" rx="23"/>
+    <rect x="325" y="352" width="46" height="320" rx="23"/>
+    <rect x="400" y="292" width="46" height="440" rx="23"/>
+    <rect x="475" y="372" width="46" height="280" rx="23"/>
+    <rect x="550" y="442" width="46" height="140" rx="23"/>
+  </g>
+  <g fill="#2a82da">
+    <rect x="693" y="292" width="40" height="440" rx="20"/>
+    <rect x="653" y="292" width="120" height="36" rx="18"/>
+    <rect x="653" y="696" width="120" height="36" rx="18"/>
+  </g>
+</svg>

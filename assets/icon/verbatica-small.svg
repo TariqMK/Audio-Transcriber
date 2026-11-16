@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Verbatica icon for 16 to 32 px: fewer, thicker bars and a bolder cursor. -->
+  <rect x="48" y="48" width="928" height="928" rx="208" fill="#262626"/>
+  <g fill="#f2f2f2">
+    <rect x="222" y="362" width="88" height="300" rx="44"/>
+    <rect x="360" y="252" width="88" height="520" rx="44"/>
+    <rect x="498" y="382" width="88" height="260" rx="44"/>
+  </g>
+  <g fill="#2a82da">
+    <rect x="676" y="242" width="72" height="540" rx="36"/>
+    <rect x="622" y="242" width="180" height="64" rx="32"/>
+    <rect x="622" y="718" width="180" height="64" rx="32"/>
+  </g>
+</svg>

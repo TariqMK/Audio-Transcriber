@@ -3,12 +3,8 @@ and subtitle files, without ever overwriting an existing result."""
 
 from __future__ import annotations
 
-import contextlib
 import os
-import shutil
-import sys
 import time
-import types
 from datetime import datetime
 from pathlib import Path
 
@@ -23,23 +19,13 @@ OUTPUT_FORMATS = {
 
 AUDIO_FILE_FILTER = "Audio Files (*.mp3 *.wav *.m4a *.flac *.ogg *.mp4 *.avi *.mkv);;All Files (*)"
 
-# Apps started from Finder or a desktop launcher don't get the shell's PATH,
-# so ffmpeg installed with Homebrew or by hand isn't found there.
-EXTRA_FFMPEG_DIRS = ["/opt/homebrew/bin", "/usr/local/bin", "/usr/bin"]
+# Skip long silences before transcribing. Faster, and avoids the text Whisper sometimes
+# invents in silent parts ("Thanks for watching!").
+VAD_FILTER = True
 
-
-def find_ffmpeg() -> str | None:
-    """Return the path of ffmpeg, which Whisper needs to read audio. If it is in a common
-    folder that isn't on PATH, add that folder to PATH so Whisper finds it too."""
-    found = shutil.which("ffmpeg")
-    if found or sys.platform == "win32":
-        return found
-    for folder in EXTRA_FFMPEG_DIRS:
-        candidate = Path(folder) / "ffmpeg"
-        if candidate.is_file() and os.access(candidate, os.X_OK):
-            os.environ["PATH"] = folder + os.pathsep + os.environ.get("PATH", "")
-            return str(candidate)
-    return None
+# One search path (greedy decoding), as openai-whisper's transcribe() used by default.
+# faster-whisper defaults to 5, which was about 1.7x slower here with the same accuracy.
+BEAM_SIZE = 1
 
 
 def add_unique_files(existing: list, new_files) -> int:
@@ -99,40 +85,20 @@ class TranscriptionCancelled(Exception):
     pass
 
 
-@contextlib.contextmanager
-def whisper_progress(on_progress, should_cancel):
-    """Whisper reports progress through a tqdm bar after each 30-second window of audio.
-    Swap in our own bar so we get progress within a file and can stop partway through it.
-    If a Whisper version doesn't use tqdm this way, cancelling falls back to between files."""
-    module = sys.modules.get("whisper.transcribe")
-    original = getattr(module, "tqdm", None)
-    if original is None or not hasattr(original, "tqdm"):
-        yield
-        return
-
-    class ProgressBar:
-        def __init__(self, total=None, **kwargs):
-            self.total = total or 0
-            self.n = 0
-
-        def __enter__(self):
-            return self
-
-        def __exit__(self, *exc):
-            return False
-
-        def update(self, n=1):
-            self.n += n
-            if self.total:
-                on_progress(min(self.n / self.total, 1.0))
-            if should_cancel():
-                raise TranscriptionCancelled()
-
-    module.tqdm = types.SimpleNamespace(tqdm=ProgressBar)
-    try:
-        yield
-    finally:
-        module.tqdm = original
+def transcribe_file(model, file_path, on_progress, should_cancel) -> dict:
+    """Transcribe one file. faster-whisper returns segments one at a time as it decodes them
+    (about every 30 seconds of audio), which gives progress and a point to stop after each one."""
+    segments, info = model.transcribe(str(file_path), vad_filter=VAD_FILTER, beam_size=BEAM_SIZE)
+    collected = []
+    for segment in segments:
+        if should_cancel():
+            raise TranscriptionCancelled()
+        collected.append({"start": segment.start, "end": segment.end, "text": segment.text})
+        if info.duration:
+            on_progress(min(segment.end / info.duration, 1.0))
+    if should_cancel():
+        raise TranscriptionCancelled()
+    return {"text": "".join(s["text"] for s in collected), "segments": collected}
 
 
 class TranscriptionWorker(QThread):
@@ -168,11 +134,12 @@ class TranscriptionWorker(QThread):
             try:
                 # Transcribe, with progress and cancel checks inside the file
                 file_start = time.time()
-                with whisper_progress(
+                result = transcribe_file(
+                    self.model,
+                    file_path,
                     lambda fraction: self.progress.emit(int((idx + fraction) / total_files * 100)),
                     lambda: self.is_cancelled,
-                ):
-                    result = self.model.transcribe(file_path, verbose=False)
+                )
                 file_duration = time.time() - file_start
 
                 word_count = len(result["text"].split())

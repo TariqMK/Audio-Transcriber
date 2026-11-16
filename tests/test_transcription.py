@@ -1,8 +1,6 @@
-"""Tests for output file names, duplicate files, subtitle output, and cancelling."""
+"""Tests for output file names, duplicate files, subtitle output, progress and cancelling."""
 
-import sys
-
-from conftest import collect
+from conftest import FakeModel, collect
 
 from verbatica import transcription as tr
 
@@ -24,19 +22,12 @@ def test_output_base_checks_every_chosen_format(tmp_path):
     assert tr.unique_output_base(tmp_path, "talk", [".txt", ".srt"]) == tmp_path / "talk (2)"
 
 
-def test_same_name_files_in_one_batch_get_separate_outputs(tmp_path, fake_whisper):
+def test_same_name_files_in_one_batch_get_separate_outputs(tmp_path):
     files = [str(tmp_path / "a" / "talk.mp3"), str(tmp_path / "b" / "talk.wav")]
-    texts = iter(["first", "second"])
-
-    class Model:
-        def transcribe(self, path, verbose):
-            return {"text": next(texts), "segments": []}
-
     out = tmp_path / "out"
-    tr.TranscriptionWorker(files, Model(), str(out), "", [".txt"]).run()
-
-    assert (out / "talk.txt").read_text() == "first"
-    assert (out / "talk (2).txt").read_text() == "second"
+    tr.TranscriptionWorker(files, FakeModel([(0, 1, " Hello.")]), str(out), "", [".txt"]).run()
+    assert (out / "talk.txt").read_text() == " Hello."
+    assert (out / "talk (2).txt").read_text() == " Hello."
 
 
 # --- Duplicate files ---------------------------------------------------------
@@ -57,16 +48,14 @@ def test_different_files_with_same_name_are_both_kept(tmp_path):
     assert len(files) == 2
 
 
-# --- Subtitles ---------------------------------------------------------------
+# --- Text and subtitles ------------------------------------------------------
 
-SEGMENTS = [
-    {"start": 0.0, "end": 2.5, "text": " Hello there."},
-    {"start": 3661.5, "end": 3663.0, "text": " One hour in."},
-]
+SEGMENTS = [(0.0, 2.5, " Hello there."), (3661.5, 3663.0, " One hour in.")]
+SEGMENT_DICTS = [{"start": s, "end": e, "text": t} for s, e, t in SEGMENTS]
 
 
 def test_srt_output():
-    assert tr.to_srt(SEGMENTS) == (
+    assert tr.to_srt(SEGMENT_DICTS) == (
         "1\n00:00:00,000 --> 00:00:02,500\nHello there.\n"
         "\n"
         "2\n01:01:01,500 --> 01:01:03,000\nOne hour in.\n"
@@ -74,7 +63,7 @@ def test_srt_output():
 
 
 def test_vtt_output():
-    assert tr.to_vtt(SEGMENTS) == (
+    assert tr.to_vtt(SEGMENT_DICTS) == (
         "WEBVTT\n"
         "\n"
         "00:00:00.000 --> 00:00:02.500\nHello there.\n"
@@ -83,96 +72,63 @@ def test_vtt_output():
     )
 
 
-def test_worker_writes_every_chosen_format(tmp_path, fake_whisper):
-    class Model:
-        def transcribe(self, path, verbose):
-            return {"text": " Hello there. One hour in.", "segments": SEGMENTS}
-
-    tr.TranscriptionWorker([str(tmp_path / "talk.mp3")], Model(), str(tmp_path), "",
+def test_worker_writes_every_chosen_format(tmp_path):
+    model = FakeModel(SEGMENTS)
+    tr.TranscriptionWorker([str(tmp_path / "talk.mp3")], model, str(tmp_path), "",
                            [".txt", ".srt", ".vtt"]).run()
-    assert (tmp_path / "talk.txt").exists()
-    assert (tmp_path / "talk.srt").read_text().startswith("1\n00:00:00,000")
-    assert (tmp_path / "talk.vtt").read_text().startswith("WEBVTT")
+    assert (tmp_path / "talk.txt").read_text() == " Hello there. One hour in."
+    assert (tmp_path / "talk.srt").read_text() == tr.to_srt(SEGMENT_DICTS)
+    assert (tmp_path / "talk.vtt").read_text() == tr.to_vtt(SEGMENT_DICTS)
+    assert model.calls[0][1:] == (True, 1)  # silence filter on, greedy decoding
 
 
 # --- Cancelling and progress -------------------------------------------------
 
 
-def test_cancel_stops_partway_through_a_file(tmp_path, fake_whisper):
-    windows_processed = []
+def test_cancel_stops_partway_through_a_file(tmp_path):
+    seen = []
 
-    class Model:
-        def transcribe(self, path, verbose):
-            # Mimic Whisper: one progress update per 30-second window
-            with sys.modules["whisper.transcribe"].tqdm.tqdm(total=10) as bar:
-                for _ in range(10):
-                    windows_processed.append(path)
-                    if len(windows_processed) == 3:
-                        worker.cancel()
-                    bar.update(1)
-            return {"text": "done", "segments": []}
+    def on_segment(path, index):
+        seen.append(index)
+        if index == 2:
+            worker.cancel()
 
+    model = FakeModel([(i * 30, i * 30 + 30, f" part {i}") for i in range(10)], on_segment=on_segment)
     files = [str(tmp_path / "one.mp3"), str(tmp_path / "two.mp3")]
-    worker = tr.TranscriptionWorker(files, Model(), str(tmp_path), "", [".txt"])
+    worker = tr.TranscriptionWorker(files, model, str(tmp_path), "", [".txt"])
     done = collect(worker.all_complete)
     worker.run()
 
-    assert len(windows_processed) == 3  # stopped inside the first file
+    assert seen == [0, 1, 2]  # stopped inside the first file
+    assert len(model.calls) == 1  # second file never started
     assert not (tmp_path / "one.txt").exists()
-    assert not (tmp_path / "two.txt").exists()
     _, _, succeeded, failed, cancelled = done[0]
     assert (succeeded, failed, cancelled) == (0, 0, True)
-    assert sys.modules["whisper.transcribe"].tqdm.tqdm is object  # real tqdm put back
 
 
-def test_progress_moves_within_a_file(tmp_path, fake_whisper):
-    class Model:
-        def transcribe(self, path, verbose):
-            with sys.modules["whisper.transcribe"].tqdm.tqdm(total=4) as bar:
-                for _ in range(4):
-                    bar.update(1)
-            return {"text": "", "segments": []}
-
+def test_progress_moves_within_a_file(tmp_path):
+    model = FakeModel([(0, 25, "a"), (25, 50, "b"), (50, 75, "c"), (75, 100, "d")])
     worker = tr.TranscriptionWorker([str(tmp_path / "a.mp3"), str(tmp_path / "b.mp3")],
-                                    Model(), str(tmp_path), "", [".txt"])
+                                    model, str(tmp_path), "", [".txt"])
     progress = collect(worker.progress)
     worker.run()
     assert [p for (p,) in progress][:4] == [12, 25, 37, 50]
 
 
-def test_failed_file_is_logged_and_the_batch_continues(tmp_path, fake_whisper):
-    class Model:
-        def transcribe(self, path, verbose):
-            if path.endswith("bad.mp3"):
-                raise RuntimeError("cannot decode")
-            return {"text": "ok", "segments": []}
+def test_silent_file_gives_empty_result(tmp_path):
+    tr.TranscriptionWorker([str(tmp_path / "quiet.mp3")], FakeModel([], duration=60),
+                           str(tmp_path), "", [".txt", ".srt"]).run()
+    assert (tmp_path / "quiet.txt").read_text() == ""
+    assert (tmp_path / "quiet.srt").read_text() == ""
 
+
+def test_failed_file_is_logged_and_the_batch_continues(tmp_path):
+    model = FakeModel([(0, 1, "ok")], fail=lambda path: path.endswith("bad.mp3"))
     logs = tmp_path / "logs"
     worker = tr.TranscriptionWorker([str(tmp_path / "bad.mp3"), str(tmp_path / "good.mp3")],
-                                    Model(), str(tmp_path), str(logs), [".txt"])
+                                    model, str(tmp_path), str(logs), [".txt"])
     done = collect(worker.all_complete)
     worker.run()
     assert (tmp_path / "good.txt").exists()
     assert done[0][2:] == (1, 1, False)
     assert "cannot decode" in next(logs.iterdir()).read_text()
-
-
-# --- ffmpeg ------------------------------------------------------------------
-
-
-def test_ffmpeg_in_homebrew_folder_is_found_without_path(tmp_path, monkeypatch):
-    if sys.platform == "win32":
-        return
-    fake = tmp_path / "ffmpeg"
-    fake.write_text("#!/bin/sh\n")
-    fake.chmod(0o755)
-    monkeypatch.setenv("PATH", "/nonexistent")
-    monkeypatch.setattr(tr, "EXTRA_FFMPEG_DIRS", [str(tmp_path)])
-    assert tr.find_ffmpeg() == str(fake)
-    assert tr.shutil.which("ffmpeg") == str(fake)  # Whisper finds it too
-
-
-def test_missing_ffmpeg_is_reported(tmp_path, monkeypatch):
-    monkeypatch.setenv("PATH", str(tmp_path))
-    monkeypatch.setattr(tr, "EXTRA_FFMPEG_DIRS", [])
-    assert tr.find_ffmpeg() is None

@@ -65,6 +65,46 @@ def test_new_settings_win_over_old_ones(tmp_path):
     assert store.load().output_dir == str((tmp_path / "new").resolve())
 
 
+def test_data_folder_from_before_the_rename_is_renamed_and_kept(tmp_path):
+    old = tmp_path / "app" / "Audio-Transcriber-data"
+    (old / "models").mkdir(parents=True)
+    (old / "models" / "tiny.pt").write_text("model")
+    (old / "settings.json").write_text(json.dumps(
+        {"models_dir": "Audio-Transcriber-data/models", "output_formats": [".srt"]}))
+
+    store = make_store(tmp_path)
+    s = store.load()
+
+    new = tmp_path / "app" / "Verbatica-data"
+    assert not old.exists()
+    assert (new / "models" / "tiny.pt").read_text() == "model"
+    assert s.models_dir == str(new / "models")
+    assert s.output_formats == [".srt"]
+
+
+def test_new_data_folder_wins_over_one_from_before_the_rename(tmp_path):
+    old = tmp_path / "app" / "Audio-Transcriber-data"
+    old.mkdir(parents=True)
+    (tmp_path / "app" / "Verbatica-data").mkdir()
+    store = make_store(tmp_path)
+    assert store.data_dir == tmp_path / "app" / "Verbatica-data"
+    assert old.exists()  # left alone
+
+
+def test_old_data_folder_is_used_if_it_cannot_be_renamed(tmp_path, monkeypatch):
+    old = tmp_path / "app" / "Audio-Transcriber-data"
+    old.mkdir(parents=True)
+    (old / "settings.json").write_text(json.dumps({"models_dir": "Audio-Transcriber-data/models"}))
+
+    def refuse(self, target):
+        raise PermissionError("read-only")
+
+    monkeypatch.setattr(st.Path, "rename", refuse)
+    store = make_store(tmp_path)
+    assert store.data_dir == old
+    assert store.load().models_dir == str(old / "models")
+
+
 def test_damaged_settings_file_falls_back_to_defaults(tmp_path):
     store = make_store(tmp_path)
     store.data_dir.mkdir(parents=True)
