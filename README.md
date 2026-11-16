@@ -2,6 +2,8 @@
 
 Transcribe audio and video files on your own computer with OpenAI's Whisper speech recognition models. Save the results as text or subtitles. Works offline after the first model download. Sends no audio or text anywhere.
 
+Website: [tariqmk.github.io/Verbatica](https://tariqmk.github.io/Verbatica/)
+
 <picture>
   <source media="(prefers-color-scheme: light)" srcset="assets/screenshots/main-window-light.png">
   <img src="assets/screenshots/main-window-dark.png" alt="Verbatica transcribing a queue of four recordings: two are done with their word counts, the third shows its waveform with a blue cursor at 62 percent, and the fourth is waiting" width="840">
@@ -117,6 +119,17 @@ The screenshots come from the real app, filled with made-up sample data. Retake 
 The script writes four images to `assets/screenshots/`: `main-window-dark.png` and `main-window-light.png` (a queue in progress), `empty-dark.png` (first open) and `settings-dark.png`. It uses a temporary data folder, so it does not read or change your settings.
 
 To rebuild the icon, banner and social card after a change to the icon or tagline, install Pillow (`pip install pillow`) and run `python assets/make_assets.py`.
+
+**Note:** The website in `docs/` uses copies of the icon and social card. After you run `make_assets.py`, copy `assets/icon/verbatica.svg` to `docs/icon.svg` and `assets/social-card.png` to `docs/social-card.png`.
+
+## Website
+The website is in `docs/`. GitHub Pages serves it from the `main` branch, `/docs` folder. It is plain HTML, CSS and JavaScript with no build step.
+
+- The download buttons get the latest release from the GitHub API. They find each file by the end of its name: `windows-x64.exe`, `macos-arm64.zip` and `linux-x64.tar.gz`.
+- If the lookup fails, the buttons open the Releases page.
+- Drafts and pre-releases are not shown.
+
+To preview the website, run `python -m http.server 8765 --bind 127.0.0.1` in `docs/` and open `http://127.0.0.1:8765/`.
 
 ## Creating a Release
 Releases are built by the **Release** workflow in GitHub Actions.

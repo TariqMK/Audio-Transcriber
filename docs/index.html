@@ -1,0 +1,235 @@
+<!doctype html>
+<!-- Verbatica product page: one static page served by GitHub Pages from docs/. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Verbatica · Speech to text, on your computer</title>
+  <meta name="description" content="Transcribe audio and video files on your own computer with Whisper models. Save the results as text or subtitles. Free for Windows, macOS and Linux. No audio or text leaves your computer.">
+  <meta name="theme-color" content="#111112">
+  <meta name="color-scheme" content="dark">
+  <link rel="icon" href="icon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="apple-touch-icon.png">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Verbatica · Speech to text, on your computer">
+  <meta property="og:description" content="Transcribe audio and video files on your own computer. Save text, SRT or VTT. Free, offline, no tracking.">
+  <meta property="og:url" content="https://tariqmk.github.io/Verbatica/">
+  <meta property="og:image" content="https://tariqmk.github.io/Verbatica/social-card.png">
+  <meta property="og:image:width" content="1280">
+  <meta property="og:image:height" content="640">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Verbatica · Speech to text, on your computer">
+  <meta name="twitter:description" content="Transcribe audio and video files on your own computer. Save text, SRT or VTT. Free, offline, no tracking.">
+  <meta name="twitter:image" content="https://tariqmk.github.io/Verbatica/social-card.png">
+  <link rel="stylesheet" href="style.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+
+<header class="nav">
+  <div class="nav-in">
+    <a class="brand" href="#top" aria-label="Verbatica home">
+      <img src="icon.svg" alt="" width="24" height="24">
+      <span>Verbatica</span>
+    </a>
+    <nav class="nav-links" aria-label="Sections">
+      <a href="#features">Features</a>
+      <a href="#download">Download</a>
+      <a href="https://github.com/TariqMK/Verbatica">GitHub</a>
+    </nav>
+    <a class="btn btn-small btn-primary" href="#download">Download</a>
+  </div>
+</header>
+
+<main id="top">
+
+  <!-- Hero -->
+  <section class="hero">
+    <svg class="motif" viewBox="0 0 1024 1024" aria-hidden="true" focusable="false">
+      <g fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="250" y="432" width="46" height="160" rx="23"/>
+        <rect x="325" y="352" width="46" height="320" rx="23"/>
+        <rect x="400" y="292" width="46" height="440" rx="23"/>
+        <rect x="475" y="372" width="46" height="280" rx="23"/>
+        <rect x="550" y="442" width="46" height="140" rx="23"/>
+        <rect x="693" y="292" width="40" height="440" rx="20"/>
+        <rect x="653" y="292" width="120" height="36" rx="18"/>
+        <rect x="653" y="696" width="120" height="36" rx="18"/>
+      </g>
+    </svg>
+
+    <div class="hero-text">
+      <h1>Speech to text,<br>on your computer<span class="caret" aria-hidden="true"></span></h1>
+      <p class="lede">Verbatica transcribes interviews, lectures, meetings and podcasts with OpenAI's Whisper models. Drop in a queue of audio or video files and get text or subtitles back. It all runs on your own machine.</p>
+      <div class="actions">
+        <a class="btn btn-primary" id="hero-download" href="https://github.com/TariqMK/Verbatica/releases/latest">Download</a>
+        <a class="btn btn-ghost" href="https://github.com/TariqMK/Verbatica">View source</a>
+      </div>
+      <p class="meta mono"><span id="hero-version">Free</span> · Windows, macOS, Linux · Audio never leaves your computer · No tracking</p>
+    </div>
+
+    <!-- Live preview of the main window -->
+    <div class="window" aria-label="Preview of the Verbatica window transcribing a queue of four files" role="img">
+      <div class="titlebar"><i></i><i></i><i></i><span>Verbatica</span></div>
+      <div class="app">
+        <div class="app-head">
+          <div class="app-title"><b>Queue</b><span class="muted" id="q-count">4 files · 2 done</span></div>
+          <div class="app-model">
+            <span class="label">Model</span>
+            <span class="select">small · 464 MB<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4.5 6.5L8 10l3.5-3.5"/></svg></span>
+            <span class="state"><i class="dot ok"></i>Loaded</span>
+          </div>
+        </div>
+        <div class="queue" id="queue"></div>
+        <div class="app-tools">
+          <span class="quiet"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 3.5v9M3.5 8h9"/></svg>Add files</span>
+          <span class="quiet">Clear</span>
+        </div>
+        <div class="total"><div class="total-bar" id="total-bar"></div></div>
+        <div class="app-foot">
+          <div class="foot-row saveto">
+            <span class="label">Save to</span>
+            <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 4.5C2 3.7 2.7 3 3.5 3h3L8 4.5h4.5c.8 0 1.5.7 1.5 1.5v5.5c0 .8-.7 1.5-1.5 1.5h-9C2.7 13 2 12.3 2 11.5z"/></svg>
+            <span class="path">~/Documents/Interviews/Transcripts</span>
+            <span class="quiet">Change…</span>
+          </div>
+          <div class="foot-row">
+            <span class="label">Formats</span>
+            <span class="chips">
+              <span class="chip on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.3l2.6 2.6L12 5.3"/></svg>Text</span>
+              <span class="chip on"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 8.3l2.6 2.6L12 5.3"/></svg>SRT</span>
+              <span class="chip">VTT</span>
+            </span>
+            <span class="spacer"></span>
+            <span class="muted" id="file-of">File 3 of 4</span>
+            <span class="abtn">Stop</span>
+            <span class="abtn dim">Transcribe</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Principles -->
+  <section class="principles" aria-label="Principles">
+    <div class="principle">
+      <h2>Stays on your computer</h2>
+      <p>Transcription runs on your own machine. Audio and transcripts never leave it. No accounts, no telemetry, no tracking.</p>
+    </div>
+    <div class="principle">
+      <h2>Nothing else to install</h2>
+      <p>Audio decoding is built in, so there is no ffmpeg and no Python to set up. Download the app and open it.</p>
+    </div>
+    <div class="principle">
+      <h2>Carry it anywhere</h2>
+      <p>Settings, models and logs live in a <code>Verbatica-data</code> folder next to the app. Move them together and everything comes along.</p>
+    </div>
+  </section>
+
+  <!-- Features -->
+  <section class="features" id="features">
+    <div class="section-head">
+      <h2>Every word, in the format you need</h2>
+      <p>Pick a model, choose your formats and select Transcribe. Verbatica works through the queue and saves each result next to the others in the folder you chose.</p>
+    </div>
+
+    <div class="panels">
+      <article class="panel wide">
+        <div class="panel-text">
+          <h3>Text and subtitles from one run</h3>
+          <p>Save each result as plain text, SRT or WebVTT subtitles, or any combination. Results are named after their source file and never overwrite an earlier one.</p>
+        </div>
+        <div class="outputs" id="outputs" aria-label="The same transcript written as Text, SRT and VTT" role="img">
+          <div class="out"><div class="out-head mono">interview.txt</div><pre class="mono" id="out-txt"></pre></div>
+          <div class="out"><div class="out-head mono">interview.srt</div><pre class="mono" id="out-srt"></pre></div>
+          <div class="out"><div class="out-head mono">interview.vtt</div><pre class="mono" id="out-vtt"></pre></div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-text">
+          <h3>Skips the silence</h3>
+          <p>Long silent parts are detected and skipped. That saves time and stops the model from inventing words where nobody spoke.</p>
+        </div>
+        <div class="silence" aria-label="A waveform with a silent gap that the cursor skips" role="img">
+          <canvas id="silence-wave" height="56"></canvas>
+          <div class="silence-meta mono"><span id="silence-time">0:00</span><span id="silence-state">Transcribing</span></div>
+          <div class="spans mono">
+            <div class="span-row"><span>0:00 – 0:34</span><span>Speech</span><span>Transcribed</span></div>
+            <div class="span-row skip"><span>0:34 – 0:50</span><span>Silence</span><span>Skipped</span></div>
+            <div class="span-row"><span>0:50 – 1:20</span><span>Speech</span><span>Transcribed</span></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
+        <div class="panel-text">
+          <h3>Verified model downloads</h3>
+          <p>Each model downloads once and every file is checked against a SHA256 checksum. An interrupted download fetches only the missing files.</p>
+        </div>
+        <div class="dl" id="dl" aria-label="Model files downloading and being verified" role="img">
+          <div class="dl-head mono">faster-whisper-small</div>
+        </div>
+      </article>
+    </div>
+
+    <div class="grid">
+      <div class="cell"><h4>Audio and video</h4><p>MP3, M4A, WAV, FLAC, OGG, MP4, MOV, AVI and MKV.</p></div>
+      <div class="cell"><h4>A whole queue</h4><p>Drag files onto the window. They are transcribed one after another.</p></div>
+      <div class="cell"><h4>Live waveform</h4><p>Written parts turn bright and a blue cursor marks the progress.</p></div>
+      <div class="cell"><h4>Six model sizes</h4><p>From tiny at 75 MB to large-v3 at 2.9 GB. Larger is more accurate.</p></div>
+      <div class="cell"><h4>Text, SRT, VTT</h4><p>Choose one format or all three for every file in the queue.</p></div>
+      <div class="cell"><h4>Never overwrites</h4><p>If <code>talk.txt</code> exists, the new result is saved as <code>talk (2).txt</code>.</p></div>
+      <div class="cell"><h4>Stops when you say</h4><p>Stop takes effect within about 30 seconds of audio, mid-file.</p></div>
+      <div class="cell"><h4>Progress per file</h4><p>A percentage on the active row, and word counts on finished ones.</p></div>
+      <div class="cell"><h4>Show in Finder</h4><p>Open the folder of any finished transcript. Show in Explorer on Windows.</p></div>
+      <div class="cell"><h4>Resumes downloads</h4><p>An interrupted model download continues with the missing files.</p></div>
+      <div class="cell"><h4>Asks before replacing</h4><p>A damaged model file is replaced only after you agree and the new copy is verified.</p></div>
+      <div class="cell"><h4>Light and dark</h4><p>Follows the system appearance on every platform.</p></div>
+      <div class="cell"><h4>Works offline</h4><p>With a model downloaded, no internet connection is needed.</p></div>
+      <div class="cell"><h4>Updates on request</h4><p>Check for Updates asks GitHub only when you select it.</p></div>
+      <div class="cell"><h4>Lighter engine</h4><p>Runs on faster-whisper. About half the memory of the original Whisper package.</p></div>
+    </div>
+  </section>
+
+  <!-- Download -->
+  <section class="download" id="download">
+    <div class="section-head">
+      <h2 id="dl-title">Download Verbatica</h2>
+      <p id="dl-sub">Free and open source. One file per platform.</p>
+    </div>
+    <div class="cards">
+      <a class="card" data-os="windows" href="https://github.com/TariqMK/Verbatica/releases/latest">
+        <div class="card-top"><h3>Windows</h3><span class="mono muted" data-size>.exe · 64-bit</span></div>
+        <p>A single program file. Put it in a folder you can write to, not Program Files. If SmartScreen shows a warning, select More info, then Run anyway.</p>
+        <span class="card-cta">Download for Windows</span>
+      </a>
+      <a class="card" data-os="macos" href="https://github.com/TariqMK/Verbatica/releases/latest">
+        <div class="card-top"><h3>macOS</h3><span class="mono muted" data-size>.zip · Apple Silicon</span></div>
+        <p>Unzip it and move Verbatica.app out of Downloads. The first time, open System Settings › Privacy &amp; Security and select Open Anyway.</p>
+        <span class="card-cta">Download for macOS</span>
+      </a>
+      <a class="card" data-os="linux" href="https://github.com/TariqMK/Verbatica/releases/latest">
+        <div class="card-top"><h3>Linux</h3><span class="mono muted" data-size>.tar.gz · x64</span></div>
+        <p>Extract the archive into a folder you can write to and run Verbatica. The app keeps its data folder beside it.</p>
+        <span class="card-cta">Download for Linux</span>
+      </a>
+    </div>
+    <p class="fine">The builds are not code-signed. Prefer to build it yourself? Run it from source with Python 3.9 or later, as described in the <a href="https://github.com/TariqMK/Verbatica#run-from-source">README</a>.</p>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-in">
+    <a class="brand" href="#top"><img src="icon.svg" alt="" width="20" height="20"><span>Verbatica</span></a>
+    <p>The app connects only when you ask: to Hugging Face to download a model, and to GitHub to check for updates.</p>
+    <nav aria-label="Project links">
+      <a href="https://github.com/TariqMK/Verbatica">GitHub</a>
+      <a href="https://github.com/TariqMK/Verbatica/releases">Releases</a>
+      <a href="https://github.com/TariqMK/Verbatica/issues">Issues</a>
+    </nav>
+  </div>
+</footer>
+
+</body>
+</html>
