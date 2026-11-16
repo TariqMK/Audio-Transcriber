@@ -2,9 +2,9 @@
 
 from PyQt6.QtWidgets import QMessageBox
 
-from audio_transcriber import __version__, app
-from audio_transcriber.settings import SettingsStore
-from audio_transcriber.update_check import UpdateInfo
+from verbatica import __version__, app
+from verbatica.settings import SettingsStore
+from verbatica.update_check import UpdateInfo
 
 
 def make_window(tmp_path):
@@ -23,7 +23,7 @@ def test_version_button_shows_the_version_and_comes_last_in_tab_order(tmp_path):
 def test_choosing_a_format_saves_settings_in_the_data_folder(tmp_path):
     window = make_window(tmp_path)
     window.format_checks[".srt"].setChecked(True)
-    saved = (tmp_path / "app" / "Audio-Transcriber-data" / "settings.json").read_text()
+    saved = (tmp_path / "app" / "Verbatica-data" / "settings.json").read_text()
     assert ".srt" in saved
 
 
@@ -47,3 +47,11 @@ def test_newer_release_tints_the_version(tmp_path, monkeypatch):
     assert app.VERSION_ACCENT in window.version_btn.styleSheet()
     assert window.version_btn.toolTip() == "v1.1.0 is available. Click for details."
     assert window.version_btn.isEnabled()
+
+
+def test_self_test_with_real_faster_whisper():
+    """Decodes real audio and runs the voice-activity model. Skipped where faster-whisper
+    isn't installed (the CI test job); the release builds run the same check."""
+    import pytest
+    pytest.importorskip("faster_whisper")
+    assert app.self_test() == 0

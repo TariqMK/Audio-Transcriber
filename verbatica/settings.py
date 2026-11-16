@@ -9,9 +9,11 @@ import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from audio_transcriber.transcription import OUTPUT_FORMATS
+from verbatica.transcription import OUTPUT_FORMATS
 
-DATA_FOLDER_NAME = "Audio-Transcriber-data"
+DATA_FOLDER_NAME = "Verbatica-data"
+# Data folder name used before the app was renamed to Verbatica. Renamed to DATA_FOLDER_NAME on first start.
+OLD_DATA_FOLDER_NAME = "Audio-Transcriber-data"
 SETTINGS_FILE_NAME = "settings.json"
 
 # Settings file used by versions before the data folder. Read once to carry settings over; never changed.
@@ -24,7 +26,7 @@ def app_folder() -> Path:
     if getattr(sys, "frozen", False):
         executable = Path(sys.executable).resolve()
         for parent in executable.parents:
-            if parent.suffix == ".app":  # .../Audio-Transcriber.app/Contents/MacOS/Audio-Transcriber
+            if parent.suffix == ".app":  # .../Verbatica.app/Contents/MacOS/Verbatica
                 return parent.parent
         return executable.parent
     return Path(__file__).resolve().parent.parent
@@ -44,7 +46,7 @@ class SettingsStore:
 
     def __init__(self, app_dir: Path | None = None, legacy_file: Path = LEGACY_SETTINGS_FILE):
         self.app_dir = Path(app_dir) if app_dir else app_folder()
-        self.data_dir = self.app_dir / DATA_FOLDER_NAME
+        self.data_dir = self._adopt_old_data_folder(self.app_dir / DATA_FOLDER_NAME)
         self.file = self.data_dir / SETTINGS_FILE_NAME
         self.legacy_file = legacy_file
 
@@ -85,6 +87,18 @@ class SettingsStore:
         temp_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
         os.replace(temp_file, self.file)
 
+    def _adopt_old_data_folder(self, data_dir: Path) -> Path:
+        """Renames the data folder of a version from before the rename, so settings and models are kept.
+        If the rename fails, the old folder is used as it is."""
+        old_dir = self.app_dir / OLD_DATA_FOLDER_NAME
+        if data_dir.exists() or not old_dir.is_dir():
+            return data_dir
+        try:
+            old_dir.rename(data_dir)
+        except OSError:
+            return old_dir
+        return data_dir
+
     def _read(self, path: Path) -> dict | None:
         try:
             data = json.loads(path.read_text(encoding="utf-8"))
@@ -103,4 +117,6 @@ class SettingsStore:
 
     def _from_stored(self, value: str) -> str:
         path = Path(value)
+        if not path.is_absolute() and path.parts[:1] == (OLD_DATA_FOLDER_NAME,):
+            path = Path(self.data_dir.name, *path.parts[1:])
         return str(path if path.is_absolute() else self.app_dir / path)
