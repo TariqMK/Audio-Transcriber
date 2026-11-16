@@ -11,6 +11,12 @@ def make_window(tmp_path):
     return app.MainWindow(SettingsStore(tmp_path / "app", legacy_file=tmp_path / "none.json"))
 
 
+def test_window_icon_loads_from_the_package_at_every_size():
+    icon = app.app_icon()
+    sizes = sorted(size.width() for size in icon.availableSizes())
+    assert sizes == [16, 32, 64, 256]
+
+
 def test_version_button_shows_the_version_and_comes_last_in_tab_order(tmp_path):
     window = make_window(tmp_path)
     button = window.version_btn

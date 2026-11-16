@@ -102,12 +102,15 @@ jobs:
           - os: windows-latest
             target: windows-x64
             mode: --onefile
+            icon: --icon assets/icon/verbatica.ico
           - os: macos-latest
             target: macos-arm64
             mode: --onedir # PyInstaller is dropping --onefile for macOS app bundles.
+            icon: --icon assets/icon/verbatica.icns
           - os: ubuntu-24.04
             target: linux-x64
             mode: --onefile
+            icon: "" # Linux executables have no file icon; the app sets its window icon.
     env:
       TAG: ${{ needs.version.outputs.tag }}
       TARGET: ${{ matrix.target }}
@@ -141,10 +144,18 @@ jobs:
       - name: Build
         shell: bash
         run: >
-          pyinstaller --noconfirm ${{ matrix.mode }} --windowed
+          pyinstaller --noconfirm ${{ matrix.mode }} --windowed ${{ matrix.icon }}
           --name Verbatica --paths .
           --collect-data faster_whisper
           verbatica/__main__.py
+
+      - name: Check the app bundle has its icon (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          contents=dist/Verbatica.app/Contents
+          icon=$(/usr/libexec/PlistBuddy -c "Print CFBundleIconFile" "$contents/Info.plist")
+          case "$icon" in *.icns) ;; *) icon="$icon.icns" ;; esac
+          test -s "$contents/Resources/$icon" || { echo "No app icon in the bundle"; exit 1; }
 
       # Loads CTranslate2, the audio decoder and the voice-activity model from inside the build.
       - name: Check the build includes faster-whisper and its data files (macOS)

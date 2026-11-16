@@ -1,7 +1,8 @@
-# Verbatica
+![Verbatica. Speech to text, on your computer.](assets/banner.png)
+
 Transcribe audio and video files on your own computer with OpenAI's Whisper speech recognition models. Save the results as text or subtitles. Works offline after the first model download. Sends no audio or text anywhere.
 
-<img width="1429" height="1450" alt="image" src="https://github.com/user-attachments/assets/5fd70da5-2504-4837-b1ba-5806cc085b25" />
+<img src="assets/screenshots/main-window-dark.png" alt="Verbatica after a finished batch: the small model loaded, four audio and video files transcribed to text and SRT subtitles, and the word count for each file" width="840">
 
 ## Features
 - Transcribes MP3, WAV, M4A, FLAC, OGG, MP4, AVI and MKV files.
@@ -89,6 +90,16 @@ The app runs Whisper models with [faster-whisper](https://github.com/SYSTRAN/fas
 2. Run: `python -m pytest`
 
 The tests use a fake model. They do not need a model download or a network connection. One test runs the real audio decoder when faster-whisper is installed.
+
+## Update the Screenshots
+The screenshot comes from the real app, filled with made-up sample data. Retake it after a change to the window.
+
+1. Install the app from source (step 4 of **Run from source**).
+2. Run: `python assets/make_screenshots.py`
+
+The script writes `assets/screenshots/main-window-dark.png`. It uses a temporary data folder, so it does not read or change your settings.
+
+To rebuild the icon, banner and social card after a change to the icon or tagline, install Pillow (`pip install pillow`) and run `python assets/make_assets.py`.
 
 ## Creating a Release
 Releases are built by the **Release** workflow in GitHub Actions.

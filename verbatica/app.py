@@ -3,18 +3,20 @@ then transcribe them. Also holds the version button that checks for updates."""
 
 from __future__ import annotations
 
+import base64
 import sys
 import traceback
 from pathlib import Path
 
-from PyQt6.QtCore import Qt, QThread, QUrl, pyqtSignal
-from PyQt6.QtGui import QColor, QDesktopServices, QFont, QPalette
+from PyQt6.QtCore import QSize, Qt, QThread, QUrl, pyqtSignal
+from PyQt6.QtGui import QColor, QDesktopServices, QFont, QIcon, QPalette, QPixmap
 from PyQt6.QtWidgets import (QApplication, QCheckBox, QComboBox, QFileDialog, QGroupBox,
                              QHBoxLayout, QLabel, QLineEdit, QListWidget, QMainWindow,
                              QMessageBox, QProgressBar, QPushButton, QTextEdit, QVBoxLayout,
                              QWidget)
 
 from verbatica import APP_NAME, __version__, update_check
+from verbatica._icon import ICON_PNGS
 from verbatica.models import DEFAULT_MODEL, MODEL_SIZES, MODELS, ModelDownloadWorker
 from verbatica.settings import SettingsStore
 from verbatica.transcription import (AUDIO_FILE_FILTER, OUTPUT_FORMATS, TranscriptionWorker,
@@ -32,6 +34,35 @@ QPushButton#version:hover {{ background: rgba(255, 255, 255, 0.10); }}
 QPushButton#version:focus {{ border: 1px solid #2a82da; }}
 QPushButton#version:disabled {{ color: {color}; }}
 """
+
+def app_icon() -> QIcon:
+    """The window and taskbar icon, built from PNG data inside the package (no files to ship)."""
+    icon = QIcon()
+    for data in ICON_PNGS.values():
+        pixmap = QPixmap()
+        pixmap.loadFromData(base64.b64decode(data), "PNG")
+        icon.addPixmap(pixmap)
+    return icon
+
+
+# Main action buttons. One accent colour (the theme's highlight blue) marks the primary action;
+# the rest are neutral. White on #2a82da is 4.0:1, above the 3:1 needed for bold 14 px text.
+BUTTON_STYLE = """
+QPushButton#primary, QPushButton#secondary {
+    font-size: 14px; font-weight: bold; padding: 10px 18px; border-radius: 6px;
+}
+QPushButton#primary { background: #2a82da; color: #ffffff; border: 1px solid #2a82da; }
+QPushButton#primary:hover { background: #3a8fe3; }
+QPushButton#primary:pressed { background: #2272c2; }
+QPushButton#secondary { background: #454545; color: #f2f2f2; border: 1px solid #5a5a5a; }
+QPushButton#secondary:hover { background: #4f4f4f; }
+QPushButton#secondary:pressed { background: #3d3d3d; }
+QPushButton#primary:disabled, QPushButton#secondary:disabled {
+    background: #3a3a3a; color: #7a7a7a; border: 1px solid #444444;
+}
+QPushButton#primary:focus, QPushButton#secondary:focus { border: 1px solid #9cc8f2; }
+"""
+
 
 class UpdateCheckWorker(QThread):
     result = pyqtSignal(object)  # update_check.UpdateInfo
@@ -75,7 +106,11 @@ class MainWindow(QMainWindow):
         # Header: title, with the version button added at the end of init_ui (see below)
         self.header_layout = QHBoxLayout()
         self.header_layout.addStretch()
-        title = QLabel(f"🎙️ {APP_NAME}")
+        logo = QLabel()
+        logo.setPixmap(app_icon().pixmap(QSize(34, 34), logo.devicePixelRatioF()))  # sharp on Retina
+        logo.setAccessibleName(f"{APP_NAME} icon")
+        self.header_layout.addWidget(logo)
+        title = QLabel(APP_NAME)
         title.setFont(QFont("Arial", 18, QFont.Weight.Bold))
         self.header_layout.addWidget(title)
         main_layout.addLayout(self.header_layout)
@@ -111,7 +146,8 @@ class MainWindow(QMainWindow):
         model_select_layout.addWidget(self.model_combo)
 
         self.load_model_btn = QPushButton("Download && Load Model")  # "&&" shows one "&" in Qt
-        self.load_model_btn.setStyleSheet("background-color: #2196F3; font-weight: bold; padding: 10px;")
+        self.load_model_btn.setObjectName("secondary")
+        self.load_model_btn.setStyleSheet(BUTTON_STYLE)
         self.load_model_btn.clicked.connect(self.download_and_load_model)
         model_select_layout.addWidget(self.load_model_btn)
 
@@ -215,14 +251,16 @@ class MainWindow(QMainWindow):
         # Control buttons
         button_layout = QHBoxLayout()
         self.start_btn = QPushButton("Start Transcription")
-        self.start_btn.setStyleSheet("background-color: #4CAF50; font-size: 14px; font-weight: bold; padding: 10px;")
+        self.start_btn.setObjectName("primary")
+        self.start_btn.setStyleSheet(BUTTON_STYLE)
         self.start_btn.setEnabled(False)  # Disabled until model is loaded
         self.start_btn.clicked.connect(self.start_transcription)
         button_layout.addWidget(self.start_btn)
 
         self.cancel_btn = QPushButton("Cancel")
         self.cancel_btn.setEnabled(False)
-        self.cancel_btn.setStyleSheet("background-color: #f44336; font-size: 14px; font-weight: bold; padding: 10px;")
+        self.cancel_btn.setObjectName("secondary")
+        self.cancel_btn.setStyleSheet(BUTTON_STYLE)
         self.cancel_btn.clicked.connect(self.cancel_transcription)
         button_layout.addWidget(self.cancel_btn)
 
@@ -569,6 +607,7 @@ def main():
         sys.exit(code)
     app = QApplication(sys.argv)
     app.setApplicationName(APP_NAME)
+    app.setWindowIcon(app_icon())
     window = MainWindow()
     window.show()
     sys.exit(app.exec())
