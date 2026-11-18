@@ -60,7 +60,7 @@
 
     <div class="hero-text">
       <h1>Speech to text,<br>on your computer<span class="caret" aria-hidden="true"></span></h1>
-      <p class="lede">Verbatica transcribes interviews, lectures, meetings and podcasts with OpenAI's Whisper models. Drop in a queue of audio or video files and get text or subtitles back. It all runs on your own machine.</p>
+      <p class="lede">Verbatica turns your recordings into text and subtitle files on your own computer. Drop in interviews, lectures, meetings or podcasts. Works offline, and sends no audio or text anywhere.</p>
       <div class="actions">
         <a class="btn btn-primary" id="hero-download" href="https://github.com/TariqMK/Verbatica/releases/latest">Download</a>
         <a class="btn btn-ghost" href="https://github.com/TariqMK/Verbatica">View source</a>
@@ -118,7 +118,7 @@
     </div>
     <div class="principle">
       <h2>Nothing else to install</h2>
-      <p>Audio decoding is built in, so there is no ffmpeg and no Python to set up. Download the app and open it.</p>
+      <p>Everything the app needs comes with it. Download it, open it and drop in a recording.</p>
     </div>
     <div class="principle">
       <h2>Carry it anywhere</h2>
@@ -165,7 +165,7 @@
       <article class="panel">
         <div class="panel-text">
           <h3>Verified model downloads</h3>
-          <p>Each model downloads once and every file is checked against a SHA256 checksum. An interrupted download fetches only the missing files.</p>
+          <p>Each model downloads once, and every file is checked, so a broken download is never used. An interrupted download fetches only the missing files.</p>
         </div>
         <div class="dl" id="dl" aria-label="Model files downloading and being verified" role="img">
           <div class="dl-head mono">faster-whisper-small</div>
@@ -188,7 +188,7 @@
       <div class="cell"><h4>Light and dark</h4><p>Follows the system appearance on every platform.</p></div>
       <div class="cell"><h4>Works offline</h4><p>With a model downloaded, no internet connection is needed.</p></div>
       <div class="cell"><h4>Updates on request</h4><p>Check for Updates asks GitHub only when you select it.</p></div>
-      <div class="cell"><h4>Lighter engine</h4><p>Runs on faster-whisper. About half the memory of the original Whisper package.</p></div>
+      <div class="cell"><h4>Keyboard first</h4><p>Add Files with Ctrl+O and Transcribe with Ctrl+Return. Command on a Mac.</p></div>
     </div>
   </section>
 
@@ -206,7 +206,7 @@
       </a>
       <a class="card" data-os="macos" href="https://github.com/TariqMK/Verbatica/releases/latest">
         <div class="card-top"><h3>macOS</h3><span class="mono muted" data-size>.zip · Apple Silicon</span></div>
-        <p>Unzip it and move Verbatica.app out of Downloads. The first time, open System Settings › Privacy &amp; Security and select Open Anyway.</p>
+        <p>Unzip it and move Verbatica.app out of Downloads. The first time, macOS shows a warning, which is expected: click Done, open System Settings › Privacy &amp; Security, click Open Anyway and enter your password.</p>
         <span class="card-cta">Download for macOS</span>
       </a>
       <a class="card" data-os="linux" href="https://github.com/TariqMK/Verbatica/releases/latest">
@@ -215,7 +215,7 @@
         <span class="card-cta">Download for Linux</span>
       </a>
     </div>
-    <p class="fine">The builds are not code-signed. Prefer to build it yourself? Run it from source with Python 3.9 or later, as described in the <a href="https://github.com/TariqMK/Verbatica#run-from-source">README</a>.</p>
+    <p class="fine">The builds are not code-signed, so Windows and macOS warn you the first time. <a href="https://github.com/TariqMK/Verbatica#opening-on-macos">First time opening it on a Mac? Here's how.</a> Want to build it yourself? See the <a href="https://github.com/TariqMK/Verbatica#for-developers">developer notes</a>.</p>
   </section>
 </main>
 
