@@ -435,10 +435,12 @@ class MainWindow(QMainWindow):
         queue_menu = menu_bar.addMenu("Queue")
         self.start_action = action("Transcribe", self.start_transcription, "Ctrl+Return")
         self.cancel_action = action("Stop", self.cancel_transcription, "Ctrl+.")
+        self.clear_done_action = action("Remove Finished Files", self.clear_done_files)
         self.clear_action = action("Remove All Files", self.clear_files)
         for item in (self.start_action, self.cancel_action):
             queue_menu.addAction(item)
         queue_menu.addSeparator()
+        queue_menu.addAction(self.clear_done_action)
         queue_menu.addAction(self.clear_action)
 
     def paint_chips(self):
@@ -486,6 +488,7 @@ class MainWindow(QMainWindow):
             widget.setEnabled(not running)
         self.clear_btn.setEnabled(not running)
         self.clear_action.setEnabled(not running and has_rows)
+        self.clear_done_action.setEnabled(not running and any(r.state == "done" for r in self.rows))
         for row in self.rows:
             row.set_busy(running)
 
@@ -656,26 +659,29 @@ class MainWindow(QMainWindow):
         self.summary = f"Skipped {skipped} file{'s' if skipped != 1 else ''} already in the queue" if skipped else ""
         self.refresh()
 
-    def remove_row(self, row: FileRow):
+    def remove_rows(self, rows):
+        """Take rows out of the queue. Only the list changes: transcripts already saved stay on disk."""
         if self.worker is not None and self.worker.isRunning():
             return
-        self.rows.remove(row)
-        row.setParent(None)
-        row.deleteLater()
+        for row in list(rows):
+            self.rows.remove(row)
+            row.setParent(None)
+            row.deleteLater()
         if self.rows:
             self.rows[0].setProperty("first", True)
             self.rows[0].style().polish(self.rows[0])
+        else:
+            self.summary = ""
         self.refresh()
 
+    def remove_row(self, row: FileRow):
+        self.remove_rows([row])
+
+    def clear_done_files(self):
+        self.remove_rows([r for r in self.rows if r.state == "done"])
+
     def clear_files(self):
-        if self.worker is not None and self.worker.isRunning():
-            return
-        for row in self.rows:
-            row.setParent(None)
-            row.deleteLater()
-        self.rows = []
-        self.summary = ""
-        self.refresh()
+        self.remove_rows(self.rows)
 
     def dragEnterEvent(self, event):
         if any(url.isLocalFile() and Path(url.toLocalFile()).is_file() for url in event.mimeData().urls()):

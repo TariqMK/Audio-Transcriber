@@ -7,7 +7,7 @@ from pathlib import Path
 
 from PyQt6.QtCore import QEasingCurve, QRectF, QSize, Qt, QVariantAnimation, pyqtSignal
 from PyQt6.QtGui import QPainter, QPainterPath
-from PyQt6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QPushButton, QSizePolicy,
+from PyQt6.QtWidgets import (QComboBox, QFrame, QHBoxLayout, QLabel, QMenu, QPushButton, QSizePolicy,
                              QVBoxLayout, QWidget)
 
 from verbatica import theme
@@ -190,6 +190,7 @@ class FileRow(QFrame):
         super().__init__(parent)
         self.path = path
         self.state = "waiting"
+        self.busy = False
         self.output_file = ""
         self.duration = 0.0
         self.tokens = theme.current()
@@ -312,7 +313,8 @@ class FileRow(QFrame):
                                    if self.duration else f"Saved as {Path(output_base).name}")
 
     def set_busy(self, busy: bool):
-        """While a batch runs, waiting files can't be removed."""
+        """While a batch runs, no file can be removed."""
+        self.busy = busy
         if self.state in ("waiting", "failed", "stopped"):
             self.action_btn.setVisible(not busy)
 
@@ -330,6 +332,19 @@ class FileRow(QFrame):
         self.action_btn.setIconSize(QSize(16, 16))
         self.action_btn.setToolTip(tooltip)
         self.action_btn.setAccessibleName(f"{tooltip}: {Path(self.path).name}")
+
+    def context_menu(self) -> QMenu:
+        """The right-click menu: show a finished file's result, or remove any file from the queue."""
+        menu = QMenu(self)
+        if self.state == "done":
+            menu.addAction(self._reveal_label(), lambda: self.reveal_requested.emit(self))
+            menu.addSeparator()
+        remove = menu.addAction("Remove from Queue", lambda: self.remove_requested.emit(self))
+        remove.setEnabled(not self.busy)
+        return menu
+
+    def contextMenuEvent(self, event):
+        self.context_menu().exec(event.globalPos())
 
     def _action(self):
         if self.state == "done":

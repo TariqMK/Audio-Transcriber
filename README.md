@@ -20,6 +20,7 @@ Website: [tariqmk.github.io/Verbatica](https://tariqmk.github.io/Verbatica/)
 - Downloads each model once and verifies every file against a SHA256 checksum.
 - Shows progress within each file. **Stop** stops within about 30 seconds of audio.
 - Opens the folder of each finished transcript with **Show in Finder** (Windows: **Show in Explorer**).
+- Removes finished files from the queue one at a time or all together. The saved transcripts stay on disk.
 - Follows the system light or dark appearance.
 - Portable: settings and models are kept in a folder next to the app.
 
@@ -59,7 +60,11 @@ Each row shows the file's state. A finished file shows its word count and a **Sh
 
 The app names each result after its source file, for example `interview.mp3` gives `interview.txt`. Errors are written to a log in the error log folder.
 
-To remove one file, select **×** at the end of its row. To remove all files, select **Clear**.
+To remove one file, select **×** at the end of its row. A finished file has no **×**. Right-click its row and select **Remove from Queue**.
+
+To remove all finished files, select **Queue > Remove Finished Files**. To remove all files, select **Clear**.
+
+**Note:** Removing a file from the queue does not delete its transcript. You cannot remove files while **Transcribe** runs.
 
 ### Settings
 Open **Settings** from the app menu (macOS: **Verbatica > Settings…**, Command-comma) or the **File** menu (Windows and Linux).

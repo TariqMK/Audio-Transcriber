@@ -178,6 +178,33 @@ def test_rows_can_be_removed_and_cleared(tmp_path):
     assert window.rows == [] and window.stack.currentIndex() == 0
 
 
+def test_finished_rows_can_be_removed_one_at_a_time_or_together(tmp_path):
+    window = loaded_window(tmp_path, files=("a.mp3", "b.mp3"))
+    run_batch(window)
+    (tmp_path / "c.mp3").write_text("x")
+    window.add_files([str(tmp_path / "c.mp3")])
+    assert window.clear_done_action.isEnabled()
+
+    menu = window.rows[0].context_menu()
+    remove = next(a for a in menu.actions() if a.text() == "Remove from Queue")
+    assert remove.isEnabled()
+    remove.trigger()
+    assert window.files == [str(tmp_path / "b.mp3"), str(tmp_path / "c.mp3")]
+
+    window.clear_done_files()
+    assert window.files == [str(tmp_path / "c.mp3")]
+    assert not window.clear_done_action.isEnabled()
+    assert (tmp_path / "out" / "a.txt").exists()  # removing a row keeps its transcript
+
+
+def test_rows_cannot_be_removed_while_a_batch_runs(tmp_path):
+    window = loaded_window(tmp_path, files=("a.mp3",))
+    run_batch(window)
+    window.rows[0].set_busy(True)
+    remove = next(a for a in window.rows[0].context_menu().actions() if a.text() == "Remove from Queue")
+    assert not remove.isEnabled()
+
+
 def test_long_paths_from_home_are_shortened(monkeypatch, tmp_path):
     monkeypatch.setattr(app.Path, "home", lambda: tmp_path)
     if app.sys.platform != "win32":
